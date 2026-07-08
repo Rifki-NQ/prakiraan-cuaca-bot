@@ -10,12 +10,12 @@ class AppService:
     def __init__(self, query_builder: QueryBuilderProtocol) -> None:
         self.query = query_builder
 
-    async def get_today_weather_forecast(self) -> AsyncIterable[ForecastModel]:
+    def get_today_weather_forecast(self) -> AsyncIterable[ForecastModel]:
         dt = self._setup_datetime()
         today_dt_range = (dt.current_datetime_start, dt.current_datetime_end)
         return self._yield_forecast(today_dt_range)
 
-    async def get_tomorrow_weather_forecast(self) -> AsyncIterable[ForecastModel]:
+    def get_tomorrow_weather_forecast(self) -> AsyncIterable[ForecastModel]:
         dt = self._setup_datetime(timedelta(days=1))
         tomorrow_dt_range = (dt.current_datetime_start, dt.current_datetime_end)
         return self._yield_forecast(tomorrow_dt_range)
