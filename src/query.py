@@ -11,10 +11,10 @@ from sqlalchemy import (
     String,
     Integer,
     DateTime,
-    insert,
     select,
     between,
 )
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import create_async_engine
 from src.models.contexts import DBContext
 from src.exceptions import (
@@ -97,9 +97,18 @@ class QueryBuilder:
         db = self._get_db()
         async with db.engine.begin() as conn:
             stmt = insert(db.offset_table).values(
-                bot_token=bot_token, offset=offset, update_time=update_time
+                bot_token=bot_token, offset=offset, updated_at=update_time
             )
-            await conn.execute(stmt)
+            pk_names = {pk.name for pk in db.offset_table.primary_key.c}
+            upsert_stmt = stmt.on_conflict_do_update(
+                index_elements=pk_names,
+                set_={
+                    col.name: stmt.excluded[col.name]
+                    for col in db.offset_table.c
+                    if col not in pk_names
+                },
+            )
+            await conn.execute(upsert_stmt)
         logger.debug("bot_offset commited to db")
 
     def _get_db(self) -> DBContext:
