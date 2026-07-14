@@ -4,7 +4,9 @@ from src.query import QueryBuilder
 from src.exceptions import InvalidDatetimeRangeError
 
 
-@pytest.mark.parametrize("start_dt", [datetime(2020, 2, 2, 1, 1, 1), datetime(2020, 2, 3)])
+@pytest.mark.parametrize(
+    "start_dt", [datetime(2020, 2, 2, 1, 1, 1), datetime(2020, 2, 3)]
+)
 async def test_invalid_datetime_range(start_dt: datetime) -> None:
     """InvalidDatetimeRangeError should be raised when start_dt is greater than end_dt"""
     end_dt = datetime(2020, 2, 2)
