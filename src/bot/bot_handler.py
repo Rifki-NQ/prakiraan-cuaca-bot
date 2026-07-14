@@ -8,7 +8,7 @@ from src.models.domain_model import ForecastModel
 from src.models.commands import Commands
 from src.models.contexts import BotUpdateContext
 from src.models.protocols import CommandRouterProtocol, BotStateHandlerProtocol
-from src.utils import format_single_weather_forecast
+from src.utils import join_forecasts
 from src.exceptions import (
     BotHandlerError,
     EmptyCommandError,
@@ -31,7 +31,6 @@ class BotHandler:
     ) -> None:
         self.router = command_router
         self.bot_state = bot_state
-        self.semaphore = asyncio.Semaphore(self.MAX_CONCURENT_TASKS)
         self.active_tasks: set[asyncio.Task[None]] = set()
 
     async def run_bot(self, bot_token: str) -> None:
@@ -73,6 +72,7 @@ class BotHandler:
                         logger.warning("Task limit reached, update will queue")
                         await self._wait_until_task_free(update.update_id)
                     task = asyncio.create_task(self._respond_to_update(bot, update))
+                    task.set_name(f"Task-{update.update_id}")
                     self.active_tasks.add(task)
                     chat_id = (
                         update.effective_chat.id if update.effective_chat else None
@@ -86,8 +86,7 @@ class BotHandler:
             logger.info("Skip responding to non Message context")
             return
         forecasts = self.router.route_command(parsed_update.command)
-        async with self.semaphore:  # limit concurent _send_buffered_forecasts
-            await self._send_buffered_forecasts(bot, parsed_update.chat_id, forecasts)
+        await self._send_forecasts(bot, parsed_update.chat_id, forecasts)
 
     async def _get_offset_from_latest_update(self, bot_token: str, bot: Bot) -> int:
         """In case offset not found on db, get the latest one from bot, then store it."""
@@ -101,10 +100,10 @@ class BotHandler:
             await self.bot_state.store_offset(bot_token, current_offset)
             return current_offset
 
-    async def _send_buffered_forecasts(
+    async def _send_forecasts(
         self, bot: Bot, chat_id: int, forecasts: AsyncIterable[ForecastModel]
     ) -> None:
-        """Send buffered forecasts with edit_message_text for every forecast."""
+        """Send fully joined forecasts."""
         msg = await bot.send_message(
             chat_id,
             "Getting weather forecast...",
@@ -112,19 +111,8 @@ class BotHandler:
             read_timeout=10,
             connect_timeout=10,
         )
-        buffer: list[str] = []
-        async for forecast in forecasts:
-            buffer.append(format_single_weather_forecast(forecast))
-            new_text = "\n".join(buffer)
-            await bot.edit_message_text(
-                new_text,
-                chat_id,
-                msg.message_id,
-                pool_timeout=10,
-                read_timeout=10,
-                connect_timeout=10,
-            )
-            await asyncio.sleep(self.BUFFERED_MESSAGE_DELAY)
+        joined_forecasts = await join_forecasts(forecasts)
+        await bot.edit_message_text(joined_forecasts, msg.chat_id, msg.message_id)
 
     def _handle_task_completion(
         self, bot: Bot, chat_id: int | None
@@ -162,7 +150,7 @@ class BotHandler:
 
     async def _wait_until_task_free(self, update_id: int) -> None:
         """Loop until there is free task slot."""
-        loop_frequency = 1
+        loop_frequency = 0.2
         while True:
             logger.debug(f"In queue: update_id - {update_id}")
             if len(self.active_tasks) < self.MAX_CONCURENT_TASKS:
