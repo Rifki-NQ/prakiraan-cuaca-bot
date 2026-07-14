@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class BotHandler:
-    MAX_CONCURENT_TASKS = 10
-    CONNECTION_POOL_SIZE = MAX_CONCURENT_TASKS + 5  # add 5 more slots for error message
+    MAX_CONCURRENT_TASKS = 15
+    CONNECTION_POOL_SIZE = MAX_CONCURRENT_TASKS
     UPDATE_TIMEOUT = 30
     BUFFERED_MESSAGE_DELAY = 1
 
@@ -32,13 +32,14 @@ class BotHandler:
         self.router = command_router
         self.bot_state = bot_state
         self.active_tasks: set[asyncio.Task[None]] = set()
+        self.semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
 
     async def run_bot(self, bot_token: str) -> None:
         """Run the bot, retry the long polling if timed out."""
-        current_offset = await self.bot_state.get_offset(bot_token)
         while True:
             try:
                 logger.info("Bot long polling started")
+                current_offset = await self.bot_state.get_offset(bot_token)
                 await self._start_long_polling(bot_token, current_offset)
             except TimedOut:
                 logger.warning("Bot long polling timed out, retrying")
@@ -68,9 +69,9 @@ class BotHandler:
                     current_offset = updates[-1].update_id + 1
                     await self.bot_state.store_offset(bot_token, current_offset)
                 for update in updates:
-                    if len(self.active_tasks) >= self.MAX_CONCURENT_TASKS:
-                        logger.warning("Task limit reached, update will queue")
-                        await self._wait_until_task_free(update.update_id)
+                    if self.semaphore.locked():  # check if task concurrency is full
+                        logger.debug("Task full, _respond_to_update() in queue")
+                    await self.semaphore.acquire()  # wait for concurrency free slot
                     task = asyncio.create_task(self._respond_to_update(bot, update))
                     task.set_name(f"Task-{update.update_id}")
                     self.active_tasks.add(task)
@@ -112,7 +113,31 @@ class BotHandler:
             connect_timeout=10,
         )
         joined_forecasts = await join_forecasts(forecasts)
-        await bot.edit_message_text(joined_forecasts, msg.chat_id, msg.message_id)
+        await bot.edit_message_text(
+            joined_forecasts,
+            msg.chat_id,
+            msg.message_id,
+            pool_timeout=10,
+            read_timeout=10,
+            connect_timeout=10,
+        )
+
+    def _create_send_bot_error_message_task(
+        self, bot: Bot, chat_id: int, err_message: str
+    ) -> None:
+        """Create the task for _send_error_message()."""
+
+        async def _send_error_message(bot: Bot, chat_id: int, err_message: str) -> None:
+            """Send error message to user."""
+            if self.semaphore.locked():
+                logger.debug("Task full, _send_error_message() in queue")
+            await self.semaphore.acquire()
+            await bot.send_message(chat_id, err_message)
+
+        task = asyncio.create_task(_send_error_message(bot, chat_id, err_message))
+        task.set_name(f"Error-Message-{chat_id}")
+        self.active_tasks.add(task)
+        task.add_done_callback(self._handle_task_completion(bot, chat_id))
 
     def _handle_task_completion(
         self, bot: Bot, chat_id: int | None
@@ -123,7 +148,7 @@ class BotHandler:
             """
             Logs the error if the task raised an error,
             send the error message to user if the error is BotHandlerError,
-            finally, discard the task from self.active_task.
+            finally, release a semaphore then discard the task from self.active_task.
             """
             try:
                 result = task.result()
@@ -135,7 +160,7 @@ class BotHandler:
                 if chat_id is None:
                     logger.info("Skip responding to non Chat context")
                 else:
-                    asyncio.create_task(bot.send_message(chat_id, e.message))
+                    self._create_send_bot_error_message_task(bot, chat_id, e.message)
             except RetryAfter as e:
                 logger.error(e.message)
             except NetworkError as e:
@@ -143,19 +168,11 @@ class BotHandler:
             except asyncio.CancelledError:
                 logger.error("Task was cancelled")
             finally:
+                self.semaphore.release()
                 self.active_tasks.discard(task)
             logger.info(f"Task: {task.get_name()} finished with error")
 
         return _cb
-
-    async def _wait_until_task_free(self, update_id: int) -> None:
-        """Loop until there is free task slot."""
-        loop_frequency = 0.2
-        while True:
-            logger.debug(f"In queue: update_id - {update_id}")
-            if len(self.active_tasks) < self.MAX_CONCURENT_TASKS:
-                break
-            await asyncio.sleep(loop_frequency)
 
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
         if update.message is not None:
