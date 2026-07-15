@@ -10,6 +10,7 @@ temperature: {forecast_data.temperature}
 humidity: {forecast_data.humidity}
 """
 
+
 async def join_forecasts(forecasts: AsyncIterable[ForecastModel]) -> str:
     """
     Turn iterable of ForecastModel into list,
