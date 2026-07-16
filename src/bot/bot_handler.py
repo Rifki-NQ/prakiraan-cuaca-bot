@@ -22,9 +22,8 @@ logger = logging.getLogger(__name__)
 
 class BotHandler:
     MAX_CONCURRENT_TASKS = 15
-    CONNECTION_POOL_SIZE = MAX_CONCURRENT_TASKS
+    CONNECTION_POOL_SIZE = MAX_CONCURRENT_TASKS + 2
     UPDATE_TIMEOUT = 30
-    BUFFERED_MESSAGE_DELAY = 1
 
     def __init__(
         self, command_router: CommandRouterProtocol, bot_state: BotStateHandlerProtocol
@@ -69,24 +68,27 @@ class BotHandler:
                     current_offset = updates[-1].update_id + 1
                     await self.bot_state.store_offset(bot_token, current_offset)
                 for update in updates:
-                    if self.semaphore.locked():  # check if task concurrency is full
-                        logger.debug("Task full, _respond_to_update() in queue")
-                    await self.semaphore.acquire()  # wait for concurrency free slot
-                    task = asyncio.create_task(self._respond_to_update(bot, update))
-                    task.set_name(f"Task-{update.update_id}")
-                    self.active_tasks.add(task)
-                    chat_id = (
-                        update.effective_chat.id if update.effective_chat else None
-                    )
-                    task.add_done_callback(self._handle_task_completion(bot, chat_id))
+                    self._create_respond_to_update_task(bot, update)
+
+    def _create_respond_to_update_task(self, bot: Bot, update: Update) -> None:
+        """Create the task for _respond_to_update()"""
+        task = asyncio.create_task(self._respond_to_update(bot, update))
+        task.set_name(f"Task-{update.update_id}")
+        self.active_tasks.add(task)
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        task.add_done_callback(self._handle_task_completion(bot, chat_id))
 
     async def _respond_to_update(self, bot: Bot, update: Update) -> None:
+        """Respond to update, queue if the task is full."""
         logger.debug(f"Responding to update id: {update.update_id}")
         parsed_update = self._parse_update(update)
         if parsed_update is None:
             logger.info("Skip responding to non Message context")
             return
         forecasts = self.router.route_command(parsed_update.command)
+        if self.semaphore.locked():  # check if task concurrency is full
+            logger.debug("Task full, _send_forecasts() in queue")
+        await self.semaphore.acquire()  # wait for concurrency free slot
         await self._send_forecasts(bot, parsed_update.chat_id, forecasts)
 
     async def _get_offset_from_latest_update(self, bot_token: str, bot: Bot) -> int:
@@ -126,18 +128,19 @@ class BotHandler:
         self, bot: Bot, chat_id: int, err_message: str
     ) -> None:
         """Create the task for _send_error_message()."""
-
-        async def _send_error_message(bot: Bot, chat_id: int, err_message: str) -> None:
-            """Send error message to user."""
-            if self.semaphore.locked():
-                logger.debug("Task full, _send_error_message() in queue")
-            await self.semaphore.acquire()
-            await bot.send_message(chat_id, err_message)
-
-        task = asyncio.create_task(_send_error_message(bot, chat_id, err_message))
+        task = asyncio.create_task(self._send_error_message(bot, chat_id, err_message))
         task.set_name(f"Error-Message-{chat_id}")
         self.active_tasks.add(task)
         task.add_done_callback(self._handle_task_completion(bot, chat_id))
+
+    async def _send_error_message(
+        self, bot: Bot, chat_id: int, err_message: str
+    ) -> None:
+        """Send error message to user."""
+        if self.semaphore.locked():
+            logger.debug("Task full, _send_error_message() in queue")
+        await self.semaphore.acquire()
+        await bot.send_message(chat_id, err_message)
 
     def _handle_task_completion(
         self, bot: Bot, chat_id: int | None
