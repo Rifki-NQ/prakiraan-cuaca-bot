@@ -1,10 +1,13 @@
 import asyncio
 from collections.abc import AsyncIterable
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from src.models.dt_model import DatetimeModel
 from src.models.domain_model import ForecastModel
 from src.models.protocols import QueryBuilderProtocol
 
+
+BOT_DATETIME = ZoneInfo("Asia/Jakarta")
 
 class AppService:
     def __init__(self, query_builder: QueryBuilderProtocol) -> None:
@@ -34,5 +37,5 @@ class AppService:
         add datetime.now() with timedelta if not None.
         """
         if timedelta is None:
-            return DatetimeModel(datetime.now())
-        return DatetimeModel(datetime.now() + timedelta)
+            return DatetimeModel(datetime.now(tz=BOT_DATETIME))
+        return DatetimeModel(datetime.now(tz=BOT_DATETIME) + timedelta)

@@ -17,6 +17,7 @@ class DatetimeModel:
     current_datetime_end: datetime = field(init=False)
 
     def __post_init__(self) -> None:
+        self.current_datetime = self.current_datetime.replace(tzinfo=None)
         self.current_datetime_start = self.current_datetime.replace(
             hour=0, minute=0, second=0
         )
