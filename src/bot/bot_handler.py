@@ -154,10 +154,7 @@ class BotHandler:
             finally, release a semaphore then discard the task from self.active_task.
             """
             try:
-                result = task.result()
-                if result is None:
-                    logger.info(f"Task: {task.get_name()} finished successfully")
-                    return
+                task.result()
             except BotHandlerError as e:
                 logger.warning(e.message)
                 if chat_id is None:
@@ -170,6 +167,11 @@ class BotHandler:
                 logger.error(e.message)
             except asyncio.CancelledError:
                 logger.error("Task was cancelled")
+            except Exception as e:
+                logger.error(f"Unexpected error: {repr(e)}", exc_info=e)
+            else:
+                logger.info(f"Task: {task.get_name()} finished successfully")
+                return
             finally:
                 self.semaphore.release()
                 self.active_tasks.discard(task)
