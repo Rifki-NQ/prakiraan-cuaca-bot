@@ -2,19 +2,21 @@ from typing import Protocol, Any
 from collections.abc import AsyncIterable
 from datetime import datetime
 from sqlalchemy import Row
-from src.models.domain_model import ForecastModel
+from src.models.domain_model import ForecastModel, UserDataModel
 from src.models.commands import Commands
 
 
-class QueryBuilderProtocol(Protocol):
+class BotQueryProtocol(Protocol):
     async def get_forecast_by_range(
-        self, datetime_range: tuple[datetime, datetime]
+        self, adm4_code: str, datetime_range: tuple[datetime, datetime]
     ) -> AsyncIterable[Row[Any]]: ...
 
     async def get_bot_offset(self, bot_token: str) -> Row[Any] | None: ...
-    async def store_bot_offset(
+    async def insert_or_update_bot_offset(
         self, bot_token: str, offset: int, update_time: datetime
     ) -> None: ...
+    async def insert_or_update_user(self, user_data: UserDataModel) -> None: ...
+    async def get_user(self, chat_id: int) -> Row[Any] | None: ...
 
 
 class AppServiceProtocol(Protocol):

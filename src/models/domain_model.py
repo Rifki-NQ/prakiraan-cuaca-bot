@@ -20,3 +20,9 @@ class ForecastModel:
     visibility: int  # meters unit
     updated_at: datetime  # datetime for the forecast last update
     created_at: datetime  # datetime for the forecast creation
+
+
+class UserDataModel:
+    chat_id: int
+    username: str | None
+    adm4_code: str

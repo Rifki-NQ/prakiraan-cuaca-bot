@@ -16,3 +16,4 @@ class DBContext:
     location_table: Table
     forecast_table: Table
     offset_table: Table
+    user_table: Table
