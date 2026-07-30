@@ -1,9 +1,11 @@
 import asyncio
 import logging
 from typing import Any
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Iterable
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from pathlib import Path
+import csv
 from sqlalchemy import (
     MetaData,
     Row,
@@ -12,13 +14,15 @@ from sqlalchemy import (
     String,
     Integer,
     DateTime,
+    Connection,
     select,
     between,
+    create_engine,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import create_async_engine
-from src.models.contexts import DBContext
-from src.models.domain_model import UserDataModel
+from src.models.contexts import DBContext, LocalDBContext
+from src.models.domain_model import UserDataModel, CSVLocationDataModel
 from src.exceptions import (
     InvalidDatetimeRangeError,
     EmptyQueryResultError,
@@ -193,4 +197,119 @@ class BotQuery:
             Column("adm4_code", String()),
             Column("updated_at", DateTime()),
             Column("created_at", DateTime()),
+        )
+
+
+class LocationFinder:
+    def __init__(self) -> None:
+        self._local_db: LocalDBContext | None = None
+
+    def setup_local_db(self, cwd_db_path: str) -> None:
+        """Must be called once before any other method."""
+        if self._local_db is not None:
+            logger.warning("sqlite engine already created")
+            return
+        engine = create_engine(f"sqlite:///{cwd_db_path}")
+        metadata = MetaData()
+        location_table = self._define_location_table(metadata)
+        with engine.connect() as conn:
+            metadata.create_all(conn)
+        self._local_db = LocalDBContext(engine=engine, location_table=location_table)
+        logger.debug("setup_local_db() executed")
+
+    def search_city_or_regency(self, city_or_regency: str) -> list[str] | None:
+        """List all possible cities or regencies based of the given 'city_or_regency' value."""
+        db = self._get_local_db()
+        with db.engine.connect() as conn:
+            stmt = (
+                select(db.location_table.c.kabupaten_atau_kota)
+                .distinct()
+                .where(
+                    db.location_table.c.kabupaten_atau_kota.like(f"%{city_or_regency}%")
+                )
+            )
+            result = conn.execute(stmt).all()
+            return [row.kabupaten_atau_kota for row in result] if result else None
+
+    def search_subdistrict(self, city_or_regency: str) -> list[str] | None:
+        """List all the subdistricts of the given city_or_regency name."""
+        db = self._get_local_db()
+        with db.engine.connect() as conn:
+            stmt = (
+                select(db.location_table.c.kecamatan)
+                .distinct()
+                .where(db.location_table.c.kabupaten_atau_kota == city_or_regency)
+            )
+            result = conn.execute(stmt).all()
+            return [row.kecamatan for row in result] if result else None
+
+    def search_village(
+        self, city_or_regency: str, subdistrict: str
+    ) -> list[str] | None:
+        """List all the villages of the given city_or_regency and subdistrict name."""
+        db = self._get_local_db()
+        with db.engine.connect() as conn:
+            stmt = (
+                select(db.location_table.c.desa_atau_kelurahan)
+                .distinct()
+                .where(
+                    (db.location_table.c.kabupaten_atau_kota == city_or_regency)
+                    & (db.location_table.c.kecamatan == subdistrict)
+                )
+            )
+            result = conn.execute(stmt).all()
+            return [row.desa_atau_kelurahan for row in result] if result else None
+
+    def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:
+        """
+        Start the transformation from csv file to sqlite .db database,
+        this method should only be called preferably once when the bot server started,
+        since the process is slow and blocking.
+        """
+        db = self._get_local_db()
+        logger.info("csv to local db transformation started")
+        with db.engine.begin() as conn:
+            for csv_row in self._get_rows_from_csv(csv_filepath):
+                self._insert_or_ignore_location(conn, db.location_table, csv_row)
+        logger.info("csv to local db transformation finished")
+
+    def _insert_or_ignore_location(
+        self, conn: Connection, table: Table, insert_value: CSVLocationDataModel
+    ) -> None:
+        """Insert or ignore the forecast_location table,
+        using sqlite specific 'OR IGNORE' dialect to ignore the conflicting row."""
+        stmt = insert(table).prefix_with("OR IGNORE").values(**insert_value.as_dict())
+        result = conn.execute(stmt)
+        if result.rowcount > 0:
+            logger.debug(f"row {insert_value.kode_adm4} inserted")
+            return
+        logger.debug(f"row {insert_value.kode_adm4} ignored")
+
+    def _get_rows_from_csv(self, csv_filepath: Path) -> Iterable[CSVLocationDataModel]:
+        """
+        Open the file then yield the converted csv row data into the domain model,
+        with 'provinsi' column removed because it's not needed for the location lookup logic.
+        """
+        with open(csv_filepath, mode="r", newline="") as f:
+            logger.debug(f"open file: {csv_filepath}")
+            reader = csv.DictReader(f)
+            for row in reader:
+                row.pop("provinsi")  # delete not needed province column
+                yield CSVLocationDataModel(**row)
+        logger.debug(f"close file: {csv_filepath}")
+
+    def _get_local_db(self) -> LocalDBContext:
+        """Get the local db attribute, raise error if self._local_db is None or no setup yet."""
+        if self._local_db is None:
+            raise DBNotInitializedError("setup_local_db() has not called yet")
+        return self._local_db
+
+    def _define_location_table(self, metadata: MetaData) -> Table:
+        return Table(
+            "forecast_location",
+            metadata,
+            Column("kode_adm4", String(), primary_key=True),
+            Column("kabupaten_atau_kota", String()),
+            Column("kecamatan", String()),
+            Column("desa_atau_kelurahan", String()),
         )

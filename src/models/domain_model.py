@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime
 
 
@@ -22,7 +22,24 @@ class ForecastModel:
     created_at: datetime  # datetime for the forecast creation
 
 
+@dataclass
 class UserDataModel:
     chat_id: int
     username: str | None
     adm4_code: str
+
+
+@dataclass
+class CSVLocationDataModel:
+    kode_adm4: str
+    kabupaten_atau_kota: str
+    kecamatan: str
+    desa_atau_kelurahan: str
+
+    def __post_init__(self) -> None:
+        self.kabupaten_atau_kota = self.kabupaten_atau_kota.lower()
+        self.kecamatan = self.kecamatan.lower()
+        self.desa_atau_kelurahan = self.desa_atau_kelurahan.lower()
+
+    def as_dict(self) -> dict[str, str]:
+        return asdict(self)
