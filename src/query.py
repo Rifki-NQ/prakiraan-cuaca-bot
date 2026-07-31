@@ -14,13 +14,11 @@ from sqlalchemy import (
     String,
     Integer,
     DateTime,
-    Connection,
     select,
     between,
-    create_engine,
 )
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection
 from src.models.contexts import DBContext, LocalDBContext
 from src.models.domain_model import UserDataModel, CSVLocationDataModel
 from src.exceptions import (
@@ -204,51 +202,52 @@ class LocationFinder:
     def __init__(self) -> None:
         self._local_db: LocalDBContext | None = None
 
-    def setup_local_db(self, cwd_db_path: str) -> None:
+    async def setup_local_db(self, db_url: str) -> None:
         """Must be called once before any other method."""
         if self._local_db is not None:
             logger.warning("sqlite engine already created")
             return
-        engine = create_engine(f"sqlite:///{cwd_db_path}")
+        engine = create_async_engine(db_url)
         metadata = MetaData()
         location_table = self._define_location_table(metadata)
-        with engine.connect() as conn:
-            metadata.create_all(conn)
+        async with engine.begin() as conn:
+            await conn.run_sync(metadata.create_all)
         self._local_db = LocalDBContext(engine=engine, location_table=location_table)
         logger.debug("setup_local_db() executed")
 
-    def search_city_or_regency(self, city_or_regency: str) -> list[str] | None:
+    async def search_city_or_regency(self, city_or_regency: str) -> list[str] | None:
         """List all possible cities or regencies based of the given 'city_or_regency' value."""
         db = self._get_local_db()
-        with db.engine.connect() as conn:
+        escaped = city_or_regency.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        async with db.engine.connect() as conn:
             stmt = (
                 select(db.location_table.c.kabupaten_atau_kota)
                 .distinct()
                 .where(
-                    db.location_table.c.kabupaten_atau_kota.like(f"%{city_or_regency}%")
+                    db.location_table.c.kabupaten_atau_kota.like(f"%{escaped}%", escape="\\")
                 )
             )
-            result = conn.execute(stmt).all()
+            result = (await conn.execute(stmt)).all()
             return [row.kabupaten_atau_kota for row in result] if result else None
 
-    def search_subdistrict(self, city_or_regency: str) -> list[str] | None:
+    async def search_subdistrict(self, city_or_regency: str) -> list[str] | None:
         """List all the subdistricts of the given city_or_regency name."""
         db = self._get_local_db()
-        with db.engine.connect() as conn:
+        async with db.engine.connect() as conn:
             stmt = (
                 select(db.location_table.c.kecamatan)
                 .distinct()
                 .where(db.location_table.c.kabupaten_atau_kota == city_or_regency)
             )
-            result = conn.execute(stmt).all()
+            result = (await conn.execute(stmt)).all()
             return [row.kecamatan for row in result] if result else None
 
-    def search_village(
+    async def search_village(
         self, city_or_regency: str, subdistrict: str
     ) -> list[str] | None:
         """List all the villages of the given city_or_regency and subdistrict name."""
         db = self._get_local_db()
-        with db.engine.connect() as conn:
+        async with db.engine.connect() as conn:
             stmt = (
                 select(db.location_table.c.desa_atau_kelurahan)
                 .distinct()
@@ -257,10 +256,10 @@ class LocationFinder:
                     & (db.location_table.c.kecamatan == subdistrict)
                 )
             )
-            result = conn.execute(stmt).all()
+            result = (await conn.execute(stmt)).all()
             return [row.desa_atau_kelurahan for row in result] if result else None
 
-    def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:
+    async def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:
         """
         Start the transformation from csv file to sqlite .db database,
         this method should only be called preferably once when the bot server started,
@@ -268,18 +267,20 @@ class LocationFinder:
         """
         db = self._get_local_db()
         logger.info("csv to local db transformation started")
-        with db.engine.begin() as conn:
+        async with db.engine.begin() as conn:
             for csv_row in self._get_rows_from_csv(csv_filepath):
-                self._insert_or_ignore_location(conn, db.location_table, csv_row)
+                await self._insert_or_ignore_location(conn, db.location_table, csv_row)
         logger.info("csv to local db transformation finished")
 
-    def _insert_or_ignore_location(
-        self, conn: Connection, table: Table, insert_value: CSVLocationDataModel
+    async def _insert_or_ignore_location(
+        self, conn: AsyncConnection, table: Table, insert_value: CSVLocationDataModel
     ) -> None:
-        """Insert or ignore the forecast_location table,
-        using sqlite specific 'OR IGNORE' dialect to ignore the conflicting row."""
+        """
+        Insert or ignore the forecast_location table,
+        using sqlite specific 'OR IGNORE' dialect to ignore the conflicting row.
+        """
         stmt = insert(table).prefix_with("OR IGNORE").values(**insert_value.as_dict())
-        result = conn.execute(stmt)
+        result = await conn.execute(stmt)
         if result.rowcount > 0:
             logger.debug(f"row {insert_value.kode_adm4} inserted")
             return

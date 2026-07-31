@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from sqlalchemy import Table, Engine
+from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import AsyncEngine
 from src.models.commands import Commands
 
@@ -21,5 +21,5 @@ class DBContext:
 
 @dataclass
 class LocalDBContext:
-    engine: Engine
+    engine: AsyncEngine
     location_table: Table
