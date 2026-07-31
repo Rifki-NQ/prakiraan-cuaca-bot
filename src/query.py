@@ -218,13 +218,20 @@ class LocationFinder:
     async def search_city_or_regency(self, city_or_regency: str) -> list[str] | None:
         """List all possible cities or regencies based of the given 'city_or_regency' value."""
         db = self._get_local_db()
-        escaped = city_or_regency.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        escaped = (
+            # note: in python string, \\ is equal to \ in pure string
+            city_or_regency.replace("\\", "\\\\")  # replace \ into \\
+            .replace("%", "\\%")  # replace % into \%
+            .replace("_", "\\_")  # replace _ into \_
+        )
         async with db.engine.connect() as conn:
             stmt = (
                 select(db.location_table.c.kabupaten_atau_kota)
                 .distinct()
                 .where(
-                    db.location_table.c.kabupaten_atau_kota.like(f"%{escaped}%", escape="\\")
+                    db.location_table.c.kabupaten_atau_kota.like(
+                        f"%{escaped}%", escape="\\"
+                    )
                 )
             )
             result = (await conn.execute(stmt)).all()
@@ -258,6 +265,19 @@ class LocationFinder:
             )
             result = (await conn.execute(stmt)).all()
             return [row.desa_atau_kelurahan for row in result] if result else None
+
+    async def get_adm4_code(
+        self, city_or_regency: str, subdistrict: str, village: str
+    ) -> str | None:
+        """Get the adm4_code of the given exact location address."""
+        db = self._get_local_db()
+        async with db.engine.connect() as conn:
+            stmt = select(db.location_table.c.kode_adm4).where(
+                (db.location_table.c.kabupaten_atau_kota == city_or_regency)
+                & (db.location_table.c.kecamatan == subdistrict)
+                & (db.location_table.c.desa_atau_kelurahan == village)
+            )
+            return (await conn.execute(stmt)).scalar()
 
     async def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:
         """
