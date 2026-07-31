@@ -11,12 +11,17 @@ class BotUpdateContext:
 
 
 @dataclass
-class DBContext:
+class ETLDBContext:
     engine: AsyncEngine
     location_table: Table
     forecast_table: Table
-    offset_table: Table
-    user_table: Table
+
+
+@dataclass
+class BotDBContext:
+    engine: AsyncEngine
+    bot_offset_table: Table
+    bot_user_table: Table
 
 
 @dataclass
