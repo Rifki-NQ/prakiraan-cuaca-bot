@@ -23,10 +23,18 @@ class ForecastModel:
 
 
 @dataclass
-class UserDataModel:
+class BotUserModel:
     chat_id: int
     username: str | None
     adm4_code: str
+
+
+@dataclass
+class BotUserStateModel:
+    chat_id: int
+    kabupaten_atau_kota: str | None = None
+    kecamatan: str | None = None
+    desa_atau_kelurahan: str | None = None
 
 
 @dataclass
