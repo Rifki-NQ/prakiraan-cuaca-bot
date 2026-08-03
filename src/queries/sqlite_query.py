@@ -6,7 +6,7 @@ from sqlalchemy import MetaData, Table, Column, String, insert, select
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from src.models.contexts import LocalDBContext
 from src.models.domain_model import CSVLocationDataModel
-from src.exceptions import DBNotInitializedError
+from src.exceptions import DBNotInitializedError, EmptyQueryResultError
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class LocationFinder:
     async def setup_local_db(self, db_url: str) -> None:
         """Must be called once before any other method."""
         if self._local_db is not None:
-            logger.warning("sqlite engine already created")
+            logger.warning("setup_local_db() already called")
             return
         engine = create_async_engine(db_url)
         metadata = MetaData()
@@ -35,15 +35,10 @@ class LocationFinder:
         self._local_db = LocalDBContext(engine=engine, location_table=location_table)
         logger.debug("setup_local_db() executed")
 
-    async def search_city_or_regency(self, city_or_regency: str) -> list[str] | None:
+    async def search_city_or_regency(self, city_or_regency: str) -> list[str]:
         """List all possible cities or regencies based of the given 'city_or_regency' value."""
         db = self._get_local_db()
-        escaped = (
-            # note: in python string, \\ is equal to \ in pure string
-            city_or_regency.replace("\\", "\\\\")  # replace \ into \\
-            .replace("%", "\\%")  # replace % into \%
-            .replace("_", "\\_")  # replace _ into \_
-        )
+        escaped = self._escape_string(city_or_regency)
         async with db.engine.connect() as conn:
             stmt = (
                 select(db.location_table.c.kabupaten_atau_kota)
@@ -55,9 +50,11 @@ class LocationFinder:
                 )
             )
             result = (await conn.execute(stmt)).all()
-            return [row.kabupaten_atau_kota for row in result] if result else None
+            if not result:
+                raise EmptyQueryResultError()
+            return [row.kabupaten_atau_kota for row in result]
 
-    async def search_subdistrict(self, city_or_regency: str) -> list[str] | None:
+    async def search_subdistrict(self, city_or_regency: str) -> list[str]:
         """List all the subdistricts of the given city_or_regency name."""
         db = self._get_local_db()
         async with db.engine.connect() as conn:
@@ -67,11 +64,11 @@ class LocationFinder:
                 .where(db.location_table.c.kabupaten_atau_kota == city_or_regency)
             )
             result = (await conn.execute(stmt)).all()
-            return [row.kecamatan for row in result] if result else None
+            if not result:
+                raise EmptyQueryResultError()
+            return [row.kecamatan for row in result]
 
-    async def search_village(
-        self, city_or_regency: str, subdistrict: str
-    ) -> list[str] | None:
+    async def search_village(self, city_or_regency: str, subdistrict: str) -> list[str]:
         """List all the villages of the given city_or_regency and subdistrict name."""
         db = self._get_local_db()
         async with db.engine.connect() as conn:
@@ -84,11 +81,13 @@ class LocationFinder:
                 )
             )
             result = (await conn.execute(stmt)).all()
-            return [row.desa_atau_kelurahan for row in result] if result else None
+            if not result:
+                raise EmptyQueryResultError()
+            return [row.desa_atau_kelurahan for row in result]
 
     async def get_adm4_code(
         self, city_or_regency: str, subdistrict: str, village: str
-    ) -> str | None:
+    ) -> str:
         """Get the adm4_code of the given exact location address."""
         db = self._get_local_db()
         async with db.engine.connect() as conn:
@@ -97,7 +96,10 @@ class LocationFinder:
                 & (db.location_table.c.kecamatan == subdistrict)
                 & (db.location_table.c.desa_atau_kelurahan == village)
             )
-            return (await conn.execute(stmt)).scalar()
+            result = (await conn.execute(stmt)).scalar()
+            if result is None:
+                raise EmptyQueryResultError()
+            return result
 
     async def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:
         """
@@ -144,6 +146,14 @@ class LocationFinder:
         if self._local_db is None:
             raise DBNotInitializedError("setup_local_db() has not called yet")
         return self._local_db
+
+    def _escape_string(self, value: str) -> str:
+        return (
+            # note: in python string, \\ is equal to \ in pure string
+            value.replace("\\", "\\\\")  # replace \ into \\
+            .replace("%", "\\%")  # replace % into \%
+            .replace("_", "\\_")  # replace _ into \_
+        )
 
     def _define_location_table(self, metadata: MetaData) -> Table:
         return Table(

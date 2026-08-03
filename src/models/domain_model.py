@@ -25,8 +25,8 @@ class ForecastModel:
 @dataclass
 class BotUserModel:
     chat_id: int
-    username: str | None
-    adm4_code: str
+    username: str | None = None
+    adm4_code: str | None = None
 
 
 @dataclass
