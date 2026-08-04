@@ -1,4 +1,5 @@
 from datetime import datetime
+from src.models.enums import UserLocationState
 
 
 class DomainError(Exception):
@@ -11,6 +12,16 @@ class QueryError(DomainError):
     """Base class for all query related error"""
 
     pass
+
+
+class DependencyMissingError(DomainError):
+    """Raised when the needed dependency is missing for a method"""
+
+    def __init__(self, dependency_name: str, method_name: str) -> None:
+        self.dependency_name = dependency_name
+        self.method_name = method_name
+
+        super().__init__(f"Error: {dependency_name} is required for {method_name}")
 
 
 class BotHandlerError(DomainError):
@@ -36,7 +47,11 @@ class InvalidDatetimeRangeError(QueryError):
 class EmptyQueryResultError(QueryError):
     """Raised when the query return zero result"""
 
-    pass
+    def __init__(self, query: dict[str, str]) -> None:
+        self.query = query
+        super().__init__(
+            f"Error: no result from query; {', '.join(f'{k}={v}' for k, v in query.items())}"
+        )
 
 
 class DBNotInitializedError(QueryError):
@@ -68,3 +83,13 @@ class NotCommandTypeError(BotHandlerError):
     def __init__(self, chat_id: int, text: str) -> None:
         self.text = text
         super().__init__(chat_id, f"Error: {text} is not a command")
+
+
+class InvalidUserStateError(BotHandlerError):
+    """Raised when user current state is invalid"""
+
+    def __init__(
+        self, chat_id: int, message: str, current_user_state: UserLocationState
+    ) -> None:
+        self.current_user_state = current_user_state
+        super().__init__(chat_id, message)

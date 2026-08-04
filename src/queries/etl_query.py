@@ -73,7 +73,9 @@ class ETLQuery:
                     await asyncio.sleep(0)
                     total_yielded += 1
                 if total_yielded == 0:
-                    raise EmptyQueryResultError("Error: query returned zero row")
+                    raise EmptyQueryResultError(
+                        {"start_dt": str(start_dt), "end_dt": str(end_dt)}
+                    )
 
         return _results()
 

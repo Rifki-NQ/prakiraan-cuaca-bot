@@ -51,7 +51,7 @@ class LocationFinder:
             )
             result = (await conn.execute(stmt)).all()
             if not result:
-                raise EmptyQueryResultError()
+                raise EmptyQueryResultError({"city_or_regency": city_or_regency})
             return [row.kabupaten_atau_kota for row in result]
 
     async def search_subdistrict(self, city_or_regency: str) -> list[str]:
@@ -65,7 +65,7 @@ class LocationFinder:
             )
             result = (await conn.execute(stmt)).all()
             if not result:
-                raise EmptyQueryResultError()
+                raise EmptyQueryResultError({"city_or_regency": city_or_regency})
             return [row.kecamatan for row in result]
 
     async def search_village(self, city_or_regency: str, subdistrict: str) -> list[str]:
@@ -82,7 +82,9 @@ class LocationFinder:
             )
             result = (await conn.execute(stmt)).all()
             if not result:
-                raise EmptyQueryResultError()
+                raise EmptyQueryResultError(
+                    {"city_or_regency": city_or_regency, "subdistrict": subdistrict}
+                )
             return [row.desa_atau_kelurahan for row in result]
 
     async def get_adm4_code(
@@ -98,7 +100,13 @@ class LocationFinder:
             )
             result = (await conn.execute(stmt)).scalar()
             if result is None:
-                raise EmptyQueryResultError()
+                raise EmptyQueryResultError(
+                    {
+                        "city_or_regency": city_or_regency,
+                        "subdistrict": subdistrict,
+                        "village": village,
+                    }
+                )
             return result
 
     async def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:

@@ -144,8 +144,9 @@ async def test_search_city_or_regency_by_partial_name(
 async def test_search_city_or_regency_by_non_existent_name_pattern(
     location_finder: LocationFinder,
 ) -> None:
-    with pytest.raises(EmptyQueryResultError):
+    with pytest.raises(EmptyQueryResultError) as exc_info:
         await location_finder.search_city_or_regency("bkasi")
+    assert exc_info.value.query.get("city_or_regency") == "bkasi"
 
 
 async def test_search_subdistrict_by_exact_name(
@@ -185,8 +186,9 @@ async def test_search_subdistrict_by_partial_name(
     Test that EmptyQueryResultError is raised, since search_subdistrict()
     requires the exact name of the 'city_or_regency'.
     """
-    with pytest.raises(EmptyQueryResultError):
+    with pytest.raises(EmptyQueryResultError) as exc_info:
         await location_finder.search_subdistrict("bekasi")
+    assert exc_info.value.query.get("city_or_regency") == "bekasi"
 
 
 async def test_search_village_by_exact_names(location_finder: LocationFinder) -> None:
@@ -207,8 +209,10 @@ async def test_search_village_by_partial_subdistrict_name(
     Test that EmptyQueryResultError is raised, since search_village()
     requires both the exact names of 'city_or_regency' and 'subdistrict'.
     """
-    with pytest.raises(EmptyQueryResultError):
+    with pytest.raises(EmptyQueryResultError) as exc_info:
         await location_finder.search_village("kabupaten bekasi", "cikarang")
+    assert exc_info.value.query.get("city_or_regency") == "kabupaten bekasi"
+    assert exc_info.value.query.get("subdistrict") == "cikarang"
 
 
 async def test_get_adm4_code_by_exact_adress(location_finder: LocationFinder) -> None:
@@ -226,10 +230,13 @@ async def test_get_adm4_code_by_non_exact_village_name(
     requires the exact adress name, which mean the exact names for all
     'city_or_regency', 'subdistrict' and 'village'.
     """
-    with pytest.raises(EmptyQueryResultError):
+    with pytest.raises(EmptyQueryResultError) as exc_info:
         await location_finder.get_adm4_code(
             "kabupaten bekasi", "cikarang pusat", "sukamah"
         )
+    assert exc_info.value.query.get("city_or_regency") == "kabupaten bekasi"
+    assert exc_info.value.query.get("subdistrict") == "cikarang pusat"
+    assert exc_info.value.query.get("village") == "sukamah"
 
 
 @pytest.mark.parametrize(
