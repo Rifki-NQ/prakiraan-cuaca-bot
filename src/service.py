@@ -28,19 +28,20 @@ class BotService:
         self.etl_query = etl_query if etl_query else "ETLQuery"
         self.bot_query = bot_query if bot_query else "BotQuery"
 
-    async def create_user(self, chat_id: int) -> None:
+    async def create_or_update_user(self, user: BotUserModel) -> None:
         bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.create_user.__qualname__
-        )
-        await bot_query.insert_or_update_user(BotUserModel(chat_id))
-        logger.debug(f"user {chat_id} created")
-
-    async def update_user(self, user: BotUserModel) -> None:
-        bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.update_user.__qualname__
+            self.bot_query, self.create_or_update_user_state.__qualname__
         )
         await bot_query.insert_or_update_user(user)
-        logger.debug(f"user {user.chat_id} updated")
+
+    async def get_user(self, chat_id: int) -> BotUserModel | None:
+        bot_query = self._get_dependency_or_raise(
+            self.bot_query, self.get_user.__qualname__
+        )
+        query_result = await bot_query.get_user(chat_id)
+        if query_result is None:
+            return None
+        return BotUserModel(**query_result._mapping)  # pyright: ignore[reportPrivateUsage]
 
     async def check_user_location_state(self, chat_id: int) -> UserLocationState:
         bot_query = self._get_dependency_or_raise(
@@ -59,19 +60,18 @@ class BotService:
         else:
             return UserLocationState.COMPLETE
 
-    async def create_user_state(self, chat_id: int) -> None:
+    async def create_or_update_user_state(self, user_state: BotUserStateModel) -> None:
         bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.create_user_state.__qualname__
-        )
-        await bot_query.insert_or_update_user_state(BotUserStateModel(chat_id))
-        logger.debug(f"user {chat_id} state created")
-
-    async def update_user_state(self, user_state: BotUserStateModel) -> None:
-        bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.update_user_state.__qualname__
+            self.bot_query, self.create_or_update_user_state.__qualname__
         )
         await bot_query.insert_or_update_user_state(user_state)
-        logger.debug(f"user {user_state.chat_id} state updated")
+
+    async def get_user_state(self, chat_id: int) -> BotUserStateModel | None:
+        bot_query = self._get_dependency_or_raise(self.bot_query, self.__qualname__)
+        query_result = await bot_query.get_user_state(chat_id)
+        if query_result is None:
+            return None
+        return BotUserStateModel(**query_result._mapping)  # pyright: ignore[reportPrivateUsage]
 
     def get_today_weather_forecast(
         self, adm4_code: str
