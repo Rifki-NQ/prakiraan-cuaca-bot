@@ -67,7 +67,9 @@ class BotService:
         await bot_query.insert_or_update_user_state(user_state)
 
     async def get_user_state(self, chat_id: int) -> BotUserStateModel | None:
-        bot_query = self._get_dependency_or_raise(self.bot_query, self.__qualname__)
+        bot_query = self._get_dependency_or_raise(
+            self.bot_query, self.get_user_state.__qualname__
+        )
         query_result = await bot_query.get_user_state(chat_id)
         if query_result is None:
             return None
