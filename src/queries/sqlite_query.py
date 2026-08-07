@@ -1,5 +1,6 @@
 import logging
 import csv
+from typing import cast
 from collections.abc import Iterable
 from pathlib import Path
 from sqlalchemy import MetaData, Table, Column, String, insert, select
@@ -22,6 +23,7 @@ class LocationFinder:
     def __init__(self) -> None:
         self._local_db: LocalDBContext | None = None
 
+    # to-do: handle when db folder destination not exist yet
     async def setup_local_db(self, db_url: str) -> None:
         """Must be called once before any other method."""
         if self._local_db is not None:
@@ -107,7 +109,7 @@ class LocationFinder:
                         "village": village,
                     }
                 )
-            return result
+            return cast(str, result)
 
     async def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:
         """
