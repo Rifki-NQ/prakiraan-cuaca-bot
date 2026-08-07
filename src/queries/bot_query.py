@@ -8,6 +8,7 @@ from sqlalchemy import (
     Column,
     String,
     Integer,
+    BigInteger,
     DateTime,
     select,
 )
@@ -77,7 +78,7 @@ class BotQuery:
         """Get or select user data if it exists."""
         db = self._get_db()
         async with db.engine.connect() as conn:
-            stmt = select(db.bot_user_table).where(
+            stmt = select(*self._exclude_timestamp_columns(db.bot_user_table)).where(
                 db.bot_user_table.c.chat_id == chat_id
             )
             result = await conn.execute(stmt)
@@ -120,9 +121,9 @@ class BotQuery:
         """Get or select user state data if it exists."""
         db = self._get_db()
         async with db.engine.connect() as conn:
-            stmt = select(db.bot_user_state_table).where(
-                db.bot_user_state_table.c.chat_id == chat_id
-            )
+            stmt = select(
+                *self._exclude_timestamp_columns(db.bot_user_state_table)
+            ).where(db.bot_user_state_table.c.chat_id == chat_id)
             result = await conn.execute(stmt)
             return result.fetchone()
 
@@ -172,6 +173,14 @@ class BotQuery:
             raise DBNotInitializedError("setup_db() has not called yet")
         return self._db
 
+    def _exclude_timestamp_columns(self, table: Table) -> set[Column[Any]]:
+        """
+        Return a set of columns except the timestamp only purpose columns,
+        which is 'updated_at' and 'created_at'.
+        """
+        excluded_column_names = ["updated_at", "created_at"]
+        return {c for c in table.c if c.name not in excluded_column_names}
+
     def _define_bot_offset_table(self, metadata: MetaData) -> Table:
         return Table(
             "bot_offset",
@@ -185,7 +194,7 @@ class BotQuery:
         return Table(
             "bot_user",
             metadata,
-            Column("chat_id", Integer(), primary_key=True),
+            Column("chat_id", BigInteger(), primary_key=True),
             Column("username", String(), nullable=True),
             Column("adm4_code", String()),
             Column("updated_at", DateTime()),
@@ -196,7 +205,7 @@ class BotQuery:
         return Table(
             "bot_user_state",
             metadata,
-            Column("chat_id", Integer(), primary_key=True),
+            Column("chat_id", BigInteger(), primary_key=True),
             Column("kabupaten_atau_kota", String(), nullable=True),
             Column("kecamatan", String(), nullable=True),
             Column("desa_atau_kelurahan", String(), nullable=True),
