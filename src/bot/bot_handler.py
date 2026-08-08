@@ -1,19 +1,18 @@
 import asyncio
 import logging
-from collections.abc import AsyncIterable, Callable
+from collections.abc import Callable
 from telegram import Bot, Update, MessageEntity
 from telegram.request import HTTPXRequest
 from telegram.error import TimedOut, RetryAfter, NetworkError
-from src.models.domain_model import ForecastModel
-from src.models.commands import Commands
+from src.models.enums import Commands
 from src.models.contexts import BotUpdateContext
-from src.models.protocols import CommandRouterProtocol, BotStateHandlerProtocol
-from src.utils import join_forecasts
+from src.models.protocols import BotRespondHandlerProtocol, BotStateHandlerProtocol
 from src.exceptions import (
     BotHandlerError,
     EmptyCommandError,
     InvalidCommandError,
     NotCommandTypeError,
+    SendMessageRetryExhaustedError,
 )
 
 
@@ -23,12 +22,17 @@ logger = logging.getLogger(__name__)
 class BotHandler:
     MAX_CONCURRENT_TASKS = 15
     CONNECTION_POOL_SIZE = MAX_CONCURRENT_TASKS + 2
-    UPDATE_TIMEOUT = 30
+    UPDATE_TIMEOUT = 30  # bot long polling value
+    SEND_MESSAGE_TIMEOUT = 5  # 5 seconds before retry mechanism trigger
+    SEND_MESSAGE_RETRY_ATTEMPT = 2  # max retry attempt
+    SEND_MESSAGE_RETRY_DELAY = 0.5  # delay per retry attempt
 
     def __init__(
-        self, command_router: CommandRouterProtocol, bot_state: BotStateHandlerProtocol
+        self,
+        respond_handler: BotRespondHandlerProtocol,
+        bot_state: BotStateHandlerProtocol,
     ) -> None:
-        self.router = command_router
+        self.respond_handler = respond_handler
         self.bot_state = bot_state
         self.active_tasks: set[asyncio.Task[None]] = set()
         self.semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
@@ -47,7 +51,10 @@ class BotHandler:
     async def _start_long_polling(
         self, bot_token: str, current_offset: int | None
     ) -> None:
-        """Start the bot long polling."""
+        """
+        Start the bot long polling,
+        persist the offset whenever get_updates return update objects.
+        """
         request = HTTPXRequest(
             connection_pool_size=self.CONNECTION_POOL_SIZE,
             pool_timeout=5,
@@ -79,49 +86,27 @@ class BotHandler:
         task.add_done_callback(self._handle_task_completion(bot, chat_id))
 
     async def _respond_to_update(self, bot: Bot, update: Update) -> None:
-        """Respond to update, queue if the task is full."""
-        logger.debug(f"Responding to update id: {update.update_id}")
-        parsed_update = self._parse_update(update)
-        if parsed_update is None:
+        """
+        Parse the update object then pass it into BotRespondHandler,
+        after that, send the respond message with retry mechanism.
+        """
+        await self.semaphore.acquire()  # concurrency limiter
+        update_context = self._parse_update(update)
+        if update_context is None:
             logger.info("Skip responding to non Message context")
             return
-        forecasts = self.router.route_command(parsed_update.command)
-        if self.semaphore.locked():  # check if task concurrency is full
-            logger.debug("Task full, _send_forecasts() in queue")
-        await self.semaphore.acquire()  # wait for concurrency free slot
-        await self._send_forecasts(bot, parsed_update.chat_id, forecasts)
-
-    async def _get_offset_from_latest_update(self, bot_token: str, bot: Bot) -> int:
-        """In case offset not found on db, get the latest one from bot, then store it."""
-        while True:
-            logger.debug("Checking for latest update offset")
-            updates = await bot.get_updates(offset=-1, timeout=self.UPDATE_TIMEOUT)
-            if not updates:
-                continue
-            logger.debug(f"Latest update found: offset num ({updates[0].update_id})")
-            current_offset = updates[-1].update_id + 1
-            await self.bot_state.store_offset(bot_token, current_offset)
-            return current_offset
-
-    async def _send_forecasts(
-        self, bot: Bot, chat_id: int, forecasts: AsyncIterable[ForecastModel]
-    ) -> None:
-        """Send fully joined forecasts."""
-        msg = await bot.send_message(
-            chat_id,
-            "Getting weather forecast...",
-            pool_timeout=10,
-            read_timeout=10,
-            connect_timeout=10,
+        logger.info(
+            f"chat_id: ({update_context.chat_id}), "
+            f"command: ({update_context.command}), "
+            f"command_value: ({update_context.command_value})"
         )
-        joined_forecasts = await join_forecasts(forecasts)
-        await bot.edit_message_text(
-            joined_forecasts,
-            msg.chat_id,
-            msg.message_id,
-            pool_timeout=10,
-            read_timeout=10,
-            connect_timeout=10,
+        respond_message = await self.respond_handler.parse_command(
+            chat_id=update_context.chat_id,
+            command=update_context.command,
+            input_value=update_context.command_value,
+        )
+        await self._send_messsage_with_retry(
+            bot, update_context.chat_id, respond_message
         )
 
     def _create_send_bot_error_message_task(
@@ -136,11 +121,34 @@ class BotHandler:
     async def _send_error_message(
         self, bot: Bot, chat_id: int, err_message: str
     ) -> None:
-        """Send error message to user."""
-        if self.semaphore.locked():
-            logger.debug("Task full, _send_error_message() in queue")
-        await self.semaphore.acquire()
-        await bot.send_message(chat_id, err_message)
+        """Send an error message to user."""
+        await self.semaphore.acquire()  # concurrency limiter
+        await self._send_messsage_with_retry(bot, chat_id, err_message)
+
+    async def _send_messsage_with_retry(
+        self, bot: Bot, chat_id: int, message: str
+    ) -> None:
+        """
+        Send a message with retry mechanism, the retry mechanism is triggered
+        when the send_message method raised TimedOut error.
+        """
+        for attempt in range(self.SEND_MESSAGE_RETRY_ATTEMPT):
+            try:
+                await bot.send_message(
+                    chat_id,
+                    message,
+                    parse_mode="HTML",
+                    read_timeout=self.SEND_MESSAGE_TIMEOUT,
+                )
+                return
+            except TimedOut:
+                await asyncio.sleep(self.SEND_MESSAGE_RETRY_DELAY)
+                logger.debug(
+                    f"send_message timed out, chat_id: {chat_id}, retry attempt: {attempt}"
+                )
+        raise SendMessageRetryExhaustedError(
+            chat_id, self.SEND_MESSAGE_RETRY_ATTEMPT, message
+        )
 
     def _handle_task_completion(
         self, bot: Bot, chat_id: int | None
@@ -170,35 +178,58 @@ class BotHandler:
             except Exception as e:
                 logger.error(f"Unexpected error: {repr(e)}", exc_info=e)
             else:
-                logger.info(f"Task: {task.get_name()} finished successfully")
+                logger.debug(f"Task: {task.get_name()} finished successfully")
                 return
             finally:
-                self.semaphore.release()
+                self.semaphore.release()  # release one slot of concurrency
                 self.active_tasks.discard(task)
-            logger.info(f"Task: {task.get_name()} finished with error")
+            logger.debug(f"Task: {task.get_name()} finished with error")
 
         return _cb
 
+    async def _get_offset_from_latest_update(self, bot_token: str, bot: Bot) -> int:
+        """In case offset not found on db, get the latest one from Bot, then store it."""
+        while True:
+            logger.debug("Checking for latest update offset")
+            updates = await bot.get_updates(offset=-1, timeout=self.UPDATE_TIMEOUT)
+            if not updates:
+                continue
+            logger.debug(f"Latest update found: offset num ({updates[0].update_id})")
+            current_offset = updates[-1].update_id + 1
+            await self.bot_state.store_offset(bot_token, current_offset)
+            return current_offset
+
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
+        """Parse the update object then convert it into BotUpdateContext."""
         if update.message is not None:
             chat_id = update.message.chat_id
-            text = self._validate_text(update.message.text, chat_id)
-            self._validate_text_type(update.message.entities, text, chat_id)
+            text = self._validate_text_is_not_none(update.message.text, chat_id).split()
+            command = self._validate_first_text_is_command(
+                update.message.entities, text[0], chat_id
+            )
             try:
-                return BotUpdateContext(chat_id, Commands(text))
+                if len(text) == 1:
+                    # return only the /command if there is no value after it
+                    return BotUpdateContext(chat_id, Commands(command))
+                else:
+                    # return the /command plus the values after it
+                    command_value = " ".join(text[1:])
+                    return BotUpdateContext(chat_id, Commands(command), command_value)
             except ValueError:
-                raise InvalidCommandError(chat_id, text)
+                raise InvalidCommandError(chat_id, command)
         return None
 
-    def _validate_text_type(
+    def _validate_first_text_is_command(
         self, entities: tuple[MessageEntity, ...], text: str, chat_id: int
-    ) -> None:
+    ) -> str:
+        """Raise error if entities does not contain a bot_command type."""
         for entity in entities:
             if entity.type == "bot_command":
-                return
+                return text
         raise NotCommandTypeError(chat_id, text)
 
-    def _validate_text(self, text: str | None, chat_id: int) -> str:
-        if text is not None:
-            return text
-        raise EmptyCommandError(chat_id)
+    def _validate_text_is_not_none(self, text: str | None, chat_id: int) -> str:
+        """Raise error when the text is either None or empty string."""
+        if text is None or not text:
+            raise EmptyCommandError(chat_id)
+        return text

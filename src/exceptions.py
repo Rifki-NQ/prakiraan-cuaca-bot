@@ -93,3 +93,38 @@ class InvalidUserStateError(BotHandlerError):
     ) -> None:
         self.current_user_state = current_user_state
         super().__init__(chat_id, message)
+
+
+class EmptyInputValueError(BotHandlerError):
+    """
+    Raised when user type /input command without giving any value after that
+
+    valid example: /input value_a
+
+    invalid example: /input
+    """
+
+    pass
+
+
+class DataIntegrityError(BotHandlerError):
+    """Raised when the data from the database does not exist or valid,
+    when it's expected to exist or valid"""
+
+    def __init__(self, chat_id: int, message: str) -> None:
+        super().__init__(chat_id, message)
+
+
+class SendMessageRetryExhaustedError(BotHandlerError):
+    """Raised when the retry attempt has reached for Bot.send_message()"""
+
+    def __init__(self, chat_id: int, retry_attempt: int, dropped_message: str) -> None:
+        self.chat_id = chat_id
+        self.retry_attempt = retry_attempt
+        self.dropped_message = dropped_message
+        super().__init__(
+            chat_id,
+            f"send_message retry attempt reached: {retry_attempt}, "
+            f"chat_id: {chat_id}, "
+            f"dropped_message: {dropped_message}",
+        )
