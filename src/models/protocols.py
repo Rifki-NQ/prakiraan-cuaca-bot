@@ -3,8 +3,15 @@ from collections.abc import AsyncIterable
 from pathlib import Path
 from datetime import datetime
 from sqlalchemy import Row
-from src.models.domain_model import ForecastModel, BotUserModel, BotUserStateModel
-from src.models.enums import Commands, UserLocationState
+from src.models.domain_model import (
+    ForecastModel,
+    BotUserModel,
+    BotUserStateModel,
+    LocationFlowResult,
+    LocationFlowResultComplete,
+)
+from src.models.enums import Commands
+from src.models.contexts import BotUserStateContext
 
 
 class ETLQueryProtocol(Protocol):
@@ -40,10 +47,27 @@ class LocationFinderProtocol(Protocol):
     ) -> None: ...
 
 
+class LocationFlowHandlerProtocol(Protocol):
+    async def handle_input_for_city_or_regency(
+        self, chat_id: int, city_or_regency: str | None
+    ) -> LocationFlowResult: ...
+    async def handle_input_for_subdistrict(
+        self,
+        chat_id: int,
+        user_state: BotUserStateModel | None,
+        subdistrict: str | None,
+    ) -> LocationFlowResult: ...
+    async def handle_input_for_village(
+        self, chat_id: int, user_state: BotUserStateModel | None, village: str | None
+    ) -> LocationFlowResult | LocationFlowResultComplete: ...
+
+
 class BotServiceProtocol(Protocol):
     async def create_or_update_user(self, user: BotUserModel) -> None: ...
     async def get_user(self, chat_id: int) -> BotUserModel | None: ...
-    async def check_user_location_state(self, chat_id: int) -> UserLocationState: ...
+    async def resolve_user_location_state(
+        self, chat_id: int
+    ) -> BotUserStateContext: ...
     async def create_or_update_user_state(
         self, user_state: BotUserStateModel
     ) -> None: ...
@@ -54,16 +78,6 @@ class BotServiceProtocol(Protocol):
     def get_tomorrow_weather_forecast(
         self, adm4_code: str
     ) -> AsyncIterable[ForecastModel]: ...
-
-
-class LocationServiceProtocol(Protocol):
-    async def search_city_or_regency(self, name_like: str) -> list[str]: ...
-    async def search_subdistrict(self, exact_name: str) -> list[str]: ...
-    async def search_village(self, exact_name: str) -> list[str]: ...
-    async def compare_input_with_query_result(
-        self, input: str, query_result: list[str]
-    ) -> None: ...
-    async def get_adm4_code_from_user_state(self, chat_id: int) -> str: ...
 
 
 class BotStateHandlerProtocol(Protocol):

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from src.models.dt_model import DatetimeModel
 from src.models.domain_model import ForecastModel, BotUserModel, BotUserStateModel
 from src.models.enums import UserLocationState
+from src.models.contexts import BotUserStateContext
 from src.models.protocols import (
     ETLQueryProtocol,
     BotQueryProtocol,
@@ -43,22 +44,20 @@ class BotService:
             return None
         return BotUserModel(**query_result._mapping)  # pyright: ignore[reportPrivateUsage]
 
-    async def check_user_location_state(self, chat_id: int) -> UserLocationState:
+    async def resolve_user_location_state(self, chat_id: int) -> BotUserStateContext:
         bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.check_user_location_state.__qualname__
+            self.bot_query, self.resolve_user_location_state.__qualname__
         )
         initial_user_state = await bot_query.get_user_state(chat_id)
         if initial_user_state is None:
-            return UserLocationState.NO_STATE
+            return BotUserStateContext(
+                user_location_state=UserLocationState.NO_STATE, bot_user_state=None
+            )
         user_state = BotUserStateModel(**initial_user_state._mapping)  # pyright: ignore[reportPrivateUsage]
-        if user_state.kabupaten_atau_kota is None:
-            return UserLocationState.NO_CITY_OR_REGENCY
-        elif user_state.kecamatan is None:
-            return UserLocationState.NO_SUBDISTRICT
-        elif user_state.desa_atau_kelurahan is None:
-            return UserLocationState.NO_VILLAGE
-        else:
-            return UserLocationState.COMPLETE
+        return BotUserStateContext(
+            user_location_state=self._derive_location_state(user_state),
+            bot_user_state=user_state,
+        )
 
     async def create_or_update_user_state(self, user_state: BotUserStateModel) -> None:
         bot_query = self._get_dependency_or_raise(
@@ -108,6 +107,18 @@ class BotService:
         if timedelta is None:
             return DatetimeModel(datetime.now(tz=BOT_DATETIME))
         return DatetimeModel(datetime.now(tz=BOT_DATETIME) + timedelta)
+
+    def _derive_location_state(
+        self, user_state: BotUserStateModel
+    ) -> UserLocationState:
+        if user_state.kabupaten_atau_kota is None:
+            return UserLocationState.NO_CITY_OR_REGENCY
+        elif user_state.kecamatan is None:
+            return UserLocationState.NO_SUBDISTRICT
+        elif user_state.desa_atau_kelurahan is None:
+            return UserLocationState.NO_VILLAGE
+        else:
+            return UserLocationState.COMPLETE
 
     def _get_dependency_or_raise(self, dependency: T | str, method_name: str) -> T:
         """Used to get dependency for the method, raise error if the dependency is str."""

@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 class BotStateHandler:
     OFFSET_STORE_INTERVAL = 30
 
-    def __init__(self, query_builder: BotQueryProtocol) -> None:
-        self.query = query_builder
+    def __init__(self, bot_query: BotQueryProtocol) -> None:
+        self.query = bot_query
         self._last_offset_store: datetime | None = None
 
     async def get_offset(self, bot_token: str) -> int | None:
@@ -26,7 +26,9 @@ class BotStateHandler:
         current_datetime = datetime.now()
         if self._can_run(current_datetime):
             self._last_offset_store = current_datetime
-            await self.query.insert_or_update_bot_offset(bot_token, offset, current_datetime)
+            await self.query.insert_or_update_bot_offset(
+                bot_token, offset, current_datetime
+            )
             logger.debug(f"offset store: (bot_token: {bot_token}, offset: {offset})")
         else:
             logger.debug(
