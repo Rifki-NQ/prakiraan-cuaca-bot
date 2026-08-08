@@ -3,7 +3,7 @@ import logging
 from collections.abc import Callable
 from telegram import Bot, Update, MessageEntity
 from telegram.request import HTTPXRequest
-from telegram.error import TimedOut, RetryAfter, NetworkError
+from telegram.error import TimedOut, RetryAfter, BadRequest, NetworkError
 from src.models.enums import Commands
 from src.models.contexts import BotUpdateContext
 from src.models.protocols import BotRespondHandlerProtocol, BotStateHandlerProtocol
@@ -170,9 +170,11 @@ class BotHandler:
                 else:
                     self._create_send_bot_error_message_task(bot, chat_id, e.message)
             except RetryAfter as e:
-                logger.error(e.message)
+                logger.error(f"Rate limited, chat_id: {chat_id}, error: {repr(e)}")
+            except BadRequest as e:
+                logger.error(f"Bad request: chat_id: {chat_id}, error: {repr(e)}")
             except NetworkError as e:
-                logger.error(e.message)
+                logger.error(f"Network error: chat_id: {chat_id}, error: {repr(e)}")
             except asyncio.CancelledError:
                 logger.error("Task was cancelled")
             except Exception as e:
