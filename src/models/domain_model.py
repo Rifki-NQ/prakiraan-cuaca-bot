@@ -51,3 +51,16 @@ class CSVLocationDataModel:
 
     def as_dict(self) -> dict[str, str]:
         return asdict(self)
+
+
+@dataclass
+class LocationFlowResult:
+    message: str
+    bot_user_state: BotUserStateModel | None = None
+
+
+@dataclass
+class LocationFlowResultComplete:
+    message: str
+    bot_user_state: BotUserStateModel
+    adm4_code: str
