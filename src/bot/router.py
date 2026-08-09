@@ -1,6 +1,7 @@
 from typing import assert_never
 from src.models.enums import Commands, BotAction, UserLocationState
 
+# TODO: Add /reset location or /reset state
 
 def route_command(
     command: Commands, user_state: UserLocationState
@@ -16,7 +17,10 @@ def route_command(
             case UserLocationState.NO_VILLAGE:
                 return (BotAction.ASK_VILLAGE,)
             case UserLocationState.COMPLETE:
-                return (BotAction.SHOW_WELCOME_BACK_INTRO,)
+                return (
+                    BotAction.SHOW_WELCOME_BACK_INTRO,
+                    BotAction.SHOW_USER_CURRENT_LOCATION,
+                )
             case _:
                 assert_never(user_state)
     elif command == Commands.LOCATION:
