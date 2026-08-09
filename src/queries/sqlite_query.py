@@ -1,9 +1,9 @@
 import logging
 import csv
-from typing import cast
+from typing import cast, Any
 from collections.abc import Iterable
 from pathlib import Path
-from sqlalchemy import MetaData, Table, Column, String, insert, select
+from sqlalchemy import MetaData, Table, Column, String, Row, insert, select
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from src.models.contexts import LocalDBContext
 from src.models.domain_model import CSVLocationDataModel
@@ -110,6 +110,18 @@ class LocationFinder:
                     }
                 )
             return cast(str, result)
+
+    async def get_full_address(self, adm4_code: str) -> Row[Any]:
+        """Get full address of the given adm4_code."""
+        db = self._get_local_db()
+        async with db.engine.connect() as conn:
+            stmt = select(db.location_table).where(
+                db.location_table.c.kode_adm4 == adm4_code
+            )
+            result = (await conn.execute(stmt)).first()
+            if result is None:
+                raise EmptyQueryResultError({"adm4_code": adm4_code})
+            return result
 
     async def start_csv_to_local_db_transformation(self, csv_filepath: Path) -> None:
         """
