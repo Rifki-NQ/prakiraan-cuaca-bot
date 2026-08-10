@@ -24,7 +24,7 @@ class BotHandler:
     CONNECTION_POOL_SIZE = MAX_CONCURRENT_TASKS + 2
     UPDATE_TIMEOUT = 30  # bot long polling value
     SEND_MESSAGE_TIMEOUT = 5  # 5 seconds before retry mechanism trigger
-    SEND_MESSAGE_RETRY_ATTEMPT = 2  # max retry attempt
+    SEND_MESSAGE_RETRY_ATTEMPT = 3  # max retry attempt
     SEND_MESSAGE_RETRY_DELAY = 0.5  # delay per retry attempt
 
     def __init__(
@@ -163,7 +163,11 @@ class BotHandler:
             """
             try:
                 task.result()
+            except SendMessageRetryExhaustedError as e:
+                # purposely not sending this error to user
+                logger.error(e.message)
             except BotHandlerError as e:
+                # send the errors under BotHandlerError to user
                 logger.warning(e.message)
                 if chat_id is None:
                     logger.info("Skip responding to non Chat context")
