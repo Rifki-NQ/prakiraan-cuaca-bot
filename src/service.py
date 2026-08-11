@@ -3,7 +3,6 @@ import asyncio
 from typing import TypeVar
 from collections.abc import AsyncIterable
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 from src.models.dt_model import DatetimeModel
 from src.models.domain_model import ForecastModel, BotUserModel, BotUserStateModel
 from src.models.enums import UserLocationState
@@ -12,11 +11,11 @@ from src.models.protocols import (
     ETLQueryProtocol,
     BotQueryProtocol,
 )
+from src.utils import BOT_DATETIME
 from src.exceptions import DependencyMissingError
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
-BOT_DATETIME = ZoneInfo("Asia/Jakarta")
 
 
 class BotService:

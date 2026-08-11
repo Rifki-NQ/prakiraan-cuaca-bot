@@ -14,7 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.dialects.postgresql import insert
-from src.service import BOT_DATETIME
+from src.utils import BOT_DATETIME
 from src.models.contexts import BotDBContext
 from src.models.domain_model import BotUserModel, BotUserStateModel
 from src.exceptions import DBNotInitializedError
@@ -145,6 +145,8 @@ class BotQuery:
                 kabupaten_atau_kota=user_state_data.kabupaten_atau_kota,
                 kecamatan=user_state_data.kecamatan,
                 desa_atau_kelurahan=user_state_data.desa_atau_kelurahan,
+                updated_at=current_dt,
+                created_at=current_dt,
             )
             upsert_stmt = stmt.on_conflict_do_update(
                 index_elements=list(pk_names),
