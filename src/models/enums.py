@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 
 
 class Commands(Enum):
@@ -32,3 +32,11 @@ class UserLocationState(Enum):
     NO_SUBDISTRICT = auto()
     NO_VILLAGE = auto()
     COMPLETE = auto()
+
+
+class UserStateCheckLevel(IntEnum):
+    """Used in src/bot/location_flow_handler.py"""
+
+    CITY_OR_REGENCY = auto()
+    SUBDISTRICT = auto()
+    VILLAGE = auto()

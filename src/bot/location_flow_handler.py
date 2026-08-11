@@ -1,5 +1,4 @@
 import logging
-from typing import NoReturn
 from src.bot import message_container
 from src.models.domain_model import (
     LocationFlowResult,
@@ -8,10 +7,11 @@ from src.models.domain_model import (
     BotUserStateModel,
 )
 from src.models.protocols import LocationFinderProtocol
+from src.models.enums import UserStateCheckLevel
+from src.bot.bot_utils import raise_data_integrity_error
 from src.exceptions import (
     EmptyQueryResultError,
     EmptyInputValueError,
-    DataIntegrityError,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,16 +62,12 @@ class LocationFlowHandler:
         subdistrict: str | None,
     ) -> LocationFlowResult:
         subdistrict = self._get_value_or_raise(chat_id, subdistrict)
-        if user_state is None:
-            logger.error(
-                f"Unexpected: missing bot_user_state data for chat_id: {chat_id}"
-            )
-            self._raise_data_integrity_error(chat_id, "city_or_regency")
-        elif user_state.kabupaten_atau_kota is None:
-            logger.error(
-                f"Unexpected: missing city_or_regency data from bot_user_state table for chat_id: {chat_id}"
-            )
-            self._raise_data_integrity_error(chat_id, "city_or_regency")
+        user_state = self._get_user_state_or_raise(
+            chat_id, user_state, UserStateCheckLevel.CITY_OR_REGENCY
+        )
+        assert user_state.kabupaten_atau_kota is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
         subdistricts = await self._get_subdistricts_or_raise(
             chat_id, user_state.kabupaten_atau_kota
         )
@@ -104,21 +100,15 @@ class LocationFlowHandler:
         self, chat_id: int, user_state: BotUserStateModel | None, village: str | None
     ) -> LocationFlowResult | LocationFlowResultComplete:
         village = self._get_value_or_raise(chat_id, village)
-        if user_state is None:
-            logger.error(
-                f"Unexpected: missing bot_user_state data for chat_id: {chat_id}"
-            )
-            self._raise_data_integrity_error(chat_id, "city_or_regency")
-        elif user_state.kabupaten_atau_kota is None:
-            logger.error(
-                f"Unexpected: missing city_or_regency data from bot_user_state table for chat_id: {chat_id}"
-            )
-            self._raise_data_integrity_error(chat_id, "city_or_regency")
-        elif user_state.kecamatan is None:
-            logger.error(
-                f"Unexpected: missing subdistrict data from bot_user_state table for chat_id: {chat_id}"
-            )
-            self._raise_data_integrity_error(chat_id, "subdistrict")
+        user_state = self._get_user_state_or_raise(
+            chat_id, user_state, UserStateCheckLevel.SUBDISTRICT
+        )
+        assert user_state.kabupaten_atau_kota is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
+        assert user_state.kecamatan is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
         villages = await self._get_villages_or_raise(
             chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan
         )
@@ -156,10 +146,10 @@ class LocationFlowHandler:
     ) -> str:
         if user_data is None:
             logger.error("Unexpected: missing bot_user data from the database")
-            self._raise_data_integrity_error(chat_id, "entire")
+            raise_data_integrity_error(chat_id, "entire")
         if user_data.adm4_code is None:
             logger.error("Unexpected: missing adm4_code from the bot_user table")
-            self._raise_data_integrity_error(chat_id, "entire")
+            raise_data_integrity_error(chat_id, "entire")
         try:
             address = await self.location_finder.get_full_address(user_data.adm4_code)
             return message_container.show_user_full_address(
@@ -170,7 +160,7 @@ class LocationFlowHandler:
             )
         except EmptyQueryResultError as e:
             logger.error(f"Unexpected: no address found for the adm4_code: {e}")
-            self._raise_data_integrity_error(chat_id, "entire")
+            raise_data_integrity_error(chat_id, "entire")
 
     async def _get_subdistricts_or_raise(
         self, chat_id: int, city_or_regency: str
@@ -182,7 +172,7 @@ class LocationFlowHandler:
                 "Unexpected: subdistrict lookup returned empty result\n"
                 f"for validated city_or_regency: {e.query.get('city_or_regency')}"
             )
-            self._raise_data_integrity_error(chat_id, "city_or_regency")
+            raise_data_integrity_error(chat_id, "city_or_regency")
 
     async def _get_villages_or_raise(
         self, chat_id: int, city_or_regency: str, subdistrict: str
@@ -197,7 +187,49 @@ class LocationFlowHandler:
                 f"for validated city_or_regency: {e.query.get('city_or_regency')}, "
                 f"and validated subdistrict: {e.query.get('subdistrict')}"
             )
-            self._raise_data_integrity_error(chat_id, "city_or_regency and subdistrict")
+            raise_data_integrity_error(chat_id, "city_or_regency and subdistrict")
+
+    def _get_user_state_or_raise(
+        self,
+        chat_id: int,
+        user_state: BotUserStateModel | None,
+        attr_check_level: UserStateCheckLevel = UserStateCheckLevel.CITY_OR_REGENCY,
+    ) -> BotUserStateModel:
+        """
+        get the state of a user,
+        raise DataIntegrityError immediately if the user_state is None
+        or user_state.kabupaten_atau_kota is None
+        """
+        if user_state is None:
+            logger.error(
+                f"Unexpected: missing bot_user_state data for chat_id: {chat_id}"
+            )
+            raise_data_integrity_error(chat_id, "city_or_regency")
+        if (
+            user_state.kabupaten_atau_kota is None
+            and attr_check_level >= UserStateCheckLevel.CITY_OR_REGENCY
+        ):
+            logger.error(
+                f"Unexpected: missing city_or_regency data from bot_user_state table for chat_id: {chat_id}"
+            )
+            raise_data_integrity_error(chat_id, "city_or_regency")
+        if (
+            user_state.kecamatan is None
+            and attr_check_level >= UserStateCheckLevel.SUBDISTRICT
+        ):
+            logger.error(
+                f"Unexpected: missing subdistrict data from bot_user_state table for chat_id: {chat_id}"
+            )
+            raise_data_integrity_error(chat_id, "subdistrict")
+        if (
+            user_state.desa_atau_kelurahan is None
+            and attr_check_level >= UserStateCheckLevel.VILLAGE
+        ):
+            logger.error(
+                f"Unexpected: missing village data from bot_user_state table for chat_id: {chat_id}"
+            )
+            raise_data_integrity_error(chat_id, "village")
+        return user_state
 
     async def _get_adm4_code_or_raise(
         self, chat_id: int, city_or_regency: str, subdistrict: str, village: str
@@ -213,7 +245,7 @@ class LocationFlowHandler:
                 f"and validated subdistrict: {e.query.get('subdistrict')}, "
                 f"and validate village: {e.query.get('village')}"
             )
-            self._raise_data_integrity_error(chat_id, "entire")
+            raise_data_integrity_error(chat_id, "entire")
 
     def _merge_list(self, list_value: list[str]) -> str:
         """
@@ -237,15 +269,3 @@ class LocationFlowHandler:
                 chat_id, "Error: input value is required after /input command"
             )
         return input_value
-
-    def _raise_data_integrity_error(
-        self, chat_id: int, re_enter_value: str
-    ) -> NoReturn:
-        """
-        raise DataIntegrityError with additional information
-        about what to re-input to user.
-        """
-        raise DataIntegrityError(
-            chat_id,
-            f"Error: system failure occured, please re-input your {re_enter_value} location",
-        )
