@@ -12,11 +12,8 @@ class Commands(Enum):
 class BotAction(Enum):
     SHOW_INTRO = auto()
     ASK_CITY_OR_REGENCY = auto()
-    SHOW_CITY_OR_REGENCY_OPTIONS = auto()
     ASK_SUBDISTRICT = auto()
-    SHOW_SUBDISTRICT_OPTIONS = auto()
     ASK_VILLAGE = auto()
-    SHOW_VILLAGE_OPTIONS = auto()
     SHOW_USER_CURRENT_LOCATION = auto()
     SHOW_WELCOME_BACK_INTRO = auto()
     SHOW_TODAY_FORECASTS = auto()

@@ -3,19 +3,20 @@ from src.models.enums import Commands, BotAction, UserLocationState
 
 # TODO: Add /reset location or /reset state
 
+
 def route_command(
     command: Commands, user_state: UserLocationState
 ) -> tuple[BotAction, ...]:
     if command == Commands.START:
         match user_state:
             case UserLocationState.NO_STATE:
-                return (BotAction.SHOW_INTRO, BotAction.ASK_CITY_OR_REGENCY)
+                return (BotAction.SHOW_INTRO, BotAction.TELLS_USER_TO_SET_LOCATION, BotAction.ASK_CITY_OR_REGENCY)
             case UserLocationState.NO_CITY_OR_REGENCY:
-                return (BotAction.ASK_CITY_OR_REGENCY,)
+                return (BotAction.TELLS_USER_TO_SET_LOCATION, BotAction.ASK_CITY_OR_REGENCY,)
             case UserLocationState.NO_SUBDISTRICT:
-                return (BotAction.ASK_SUBDISTRICT,)
+                return (BotAction.TELLS_USER_TO_FINISH_SET_LOCATION, BotAction.ASK_SUBDISTRICT,)
             case UserLocationState.NO_VILLAGE:
-                return (BotAction.ASK_VILLAGE,)
+                return (BotAction.TELLS_USER_TO_FINISH_SET_LOCATION, BotAction.ASK_VILLAGE,)
             case UserLocationState.COMPLETE:
                 return (
                     BotAction.SHOW_WELCOME_BACK_INTRO,
@@ -26,13 +27,13 @@ def route_command(
     elif command == Commands.LOCATION:
         match user_state:
             case UserLocationState.NO_STATE:
-                return (BotAction.ASK_CITY_OR_REGENCY,)
+                return (BotAction.TELLS_USER_TO_SET_LOCATION, BotAction.ASK_CITY_OR_REGENCY,)
             case UserLocationState.NO_CITY_OR_REGENCY:
-                return (BotAction.ASK_CITY_OR_REGENCY,)
+                return (BotAction.TELLS_USER_TO_SET_LOCATION, BotAction.ASK_CITY_OR_REGENCY,)
             case UserLocationState.NO_SUBDISTRICT:
-                return (BotAction.ASK_SUBDISTRICT,)
+                return (BotAction.TELLS_USER_TO_FINISH_SET_LOCATION, BotAction.ASK_SUBDISTRICT,)
             case UserLocationState.NO_VILLAGE:
-                return (BotAction.ASK_VILLAGE,)
+                return (BotAction.TELLS_USER_TO_FINISH_SET_LOCATION, BotAction.ASK_VILLAGE,)
             case UserLocationState.COMPLETE:
                 return (BotAction.SHOW_USER_CURRENT_LOCATION,)
             case _:
