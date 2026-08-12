@@ -114,8 +114,14 @@ class LocationFlowHandler:
         )
         if village in villages:
             # immediately get adm4_code based on the full address
-            adm4_code = await self._get_adm4_code_or_raise(
-                chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan, village
+            adm4_code = await self.get_adm4_code_or_raise(
+                chat_id,
+                BotUserStateModel(
+                    chat_id,
+                    user_state.kabupaten_atau_kota,
+                    user_state.kecamatan,
+                    village,
+                ),
             )
             return LocationFlowResultComplete(
                 message=self._merge_messages(
@@ -160,6 +166,36 @@ class LocationFlowHandler:
             )
         except EmptyQueryResultError as e:
             logger.error(f"Unexpected: no address found for the adm4_code: {e}")
+            raise_data_integrity_error(chat_id, "entire")
+
+    async def get_adm4_code_or_raise(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> str:
+        user_state = self._get_user_state_or_raise(
+            chat_id, user_state, UserStateCheckLevel.VILLAGE
+        )
+        assert user_state.kabupaten_atau_kota is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
+        assert user_state.kecamatan is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
+        assert user_state.desa_atau_kelurahan is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
+        try:
+            return await self.location_finder.get_adm4_code(
+                user_state.kabupaten_atau_kota,
+                user_state.kecamatan,
+                user_state.desa_atau_kelurahan,
+            )
+        except EmptyQueryResultError as e:
+            logger.error(
+                "Unexpected: adm4_code lookup returned empty result\n"
+                f"for validated city_or_regency: {e.query.get('city_or_regency')}, "
+                f"and validated subdistrict: {e.query.get('subdistrict')}, "
+                f"and validate village: {e.query.get('village')}"
+            )
             raise_data_integrity_error(chat_id, "entire")
 
     async def _get_subdistricts_or_raise(
@@ -230,22 +266,6 @@ class LocationFlowHandler:
             )
             raise_data_integrity_error(chat_id, "village")
         return user_state
-
-    async def _get_adm4_code_or_raise(
-        self, chat_id: int, city_or_regency: str, subdistrict: str, village: str
-    ) -> str:
-        try:
-            return await self.location_finder.get_adm4_code(
-                city_or_regency, subdistrict, village
-            )
-        except EmptyQueryResultError as e:
-            logger.error(
-                "Unexpected: adm4_code lookup returned empty result\n"
-                f"for validated city_or_regency: {e.query.get('city_or_regency')}, "
-                f"and validated subdistrict: {e.query.get('subdistrict')}, "
-                f"and validate village: {e.query.get('village')}"
-            )
-            raise_data_integrity_error(chat_id, "entire")
 
     def _merge_list(self, list_value: list[str]) -> str:
         """

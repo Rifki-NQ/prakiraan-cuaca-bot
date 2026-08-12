@@ -40,3 +40,10 @@ class UserStateCheckLevel(IntEnum):
     CITY_OR_REGENCY = auto()
     SUBDISTRICT = auto()
     VILLAGE = auto()
+
+
+class UserDataRestorationResult(Enum):
+    """Used in src/bot/bot_respond_handler.py"""
+
+    SUCCESS = auto()
+    FAILED = auto()

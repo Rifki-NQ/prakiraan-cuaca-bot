@@ -64,6 +64,9 @@ class LocationFlowHandlerProtocol(Protocol):
     async def get_full_address(
         self, chat_id: int, user_data: BotUserModel | None
     ) -> str: ...
+    async def get_adm4_code_or_raise(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> str: ...
 
 
 class BotServiceProtocol(Protocol):
