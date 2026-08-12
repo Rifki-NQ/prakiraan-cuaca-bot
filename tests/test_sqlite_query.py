@@ -239,6 +239,23 @@ async def test_get_adm4_code_by_non_exact_village_name(
     assert exc_info.value.query.get("village") == "sukamah"
 
 
+async def test_get_full_address_return_expected(
+    location_finder: LocationFinder,
+) -> None:
+    address = await location_finder.get_full_address("32.16.20.2003")
+    assert address.kabupaten_atau_kota == "kabupaten bekasi"
+    assert address.kecamatan == "cikarang pusat"
+    assert address.desa_atau_kelurahan == "pasiranji"
+
+
+async def test_get_full_address_by_invalid_adm4_code(
+    location_finder: LocationFinder,
+) -> None:
+    with pytest.raises(EmptyQueryResultError) as exc_info:
+        await location_finder.get_full_address("invalid_code")
+    assert exc_info.value.query.get("adm4_code") == "invalid_code"
+
+
 @pytest.mark.parametrize(
     "input_value, expected_return",
     [
