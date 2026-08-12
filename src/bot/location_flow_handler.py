@@ -8,7 +8,11 @@ from src.models.domain_model import (
 )
 from src.models.protocols import LocationFinderProtocol
 from src.models.enums import UserStateCheckLevel
-from src.bot.bot_utils import raise_data_integrity_error
+from src.bot.bot_utils import (
+    raise_data_integrity_error,
+    get_user_data_or_raise,
+    merge_messages,
+)
 from src.exceptions import (
     EmptyQueryResultError,
     EmptyInputValueError,
@@ -38,7 +42,7 @@ class LocationFlowHandler:
         if len(result) == 1:
             subdistricts = await self._get_subdistricts_or_raise(chat_id, result[0])
             return LocationFlowResult(
-                message=self._merge_messages(
+                message=merge_messages(
                     message_container.notify_city_or_regency_updated(result[0]),
                     # immediately proceed to show list of the subdistricts
                     message_container.notify_to_choose_subdistrict(
@@ -77,7 +81,7 @@ class LocationFlowHandler:
                 chat_id, user_state.kabupaten_atau_kota, subdistrict
             )
             return LocationFlowResult(
-                message=self._merge_messages(
+                message=merge_messages(
                     message_container.notify_subdistrict_updated(subdistrict),
                     # immediately proceed to show list of the villages
                     message_container.notify_to_choose_village(
@@ -124,7 +128,7 @@ class LocationFlowHandler:
                 ),
             )
             return LocationFlowResultComplete(
-                message=self._merge_messages(
+                message=merge_messages(
                     message_container.notify_village_updated(village),
                     message_container.notify_location_updated(
                         user_state.kabupaten_atau_kota,
@@ -150,12 +154,10 @@ class LocationFlowHandler:
     async def get_full_address(
         self, chat_id: int, user_data: BotUserModel | None
     ) -> str:
-        if user_data is None:
-            logger.error("Unexpected: missing bot_user data from the database")
-            raise_data_integrity_error(chat_id, "entire")
-        if user_data.adm4_code is None:
-            logger.error("Unexpected: missing adm4_code from the bot_user table")
-            raise_data_integrity_error(chat_id, "entire")
+        user_data = get_user_data_or_raise(chat_id, user_data, logger)
+        assert user_data.adm4_code is not None, (
+            "get_user_data_or_raise() guarantee this attribute is not None"
+        )
         try:
             address = await self.location_finder.get_full_address(user_data.adm4_code)
             return message_container.show_user_full_address(
@@ -278,10 +280,6 @@ class LocationFlowHandler:
         - tiga
         """
         return "\n".join(["- " + ls for ls in list_value])
-
-    def _merge_messages(self, *messages: str) -> str:
-        """Merge given string tuple into a single string."""
-        return "\n".join(messages)
 
     def _get_value_or_raise(self, chat_id: int, input_value: str | None) -> str:
         if input_value is None:
