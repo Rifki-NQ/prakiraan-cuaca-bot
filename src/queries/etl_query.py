@@ -74,7 +74,10 @@ class ETLQuery:
                     total_yielded += 1
                 if total_yielded == 0:
                     raise EmptyQueryResultError(
-                        {"start_dt": str(start_dt), "end_dt": str(end_dt)}
+                        {
+                            "start_dt": start_dt.strftime("%d-%m-%Y %H:%M:%S"),
+                            "end_dt": end_dt.strftime("%d-%m-%Y %H:%M:%S"),
+                        }
                     )
 
         return _results()
