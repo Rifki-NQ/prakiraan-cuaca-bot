@@ -2,12 +2,16 @@ import os
 import asyncio
 import logging
 from logging.handlers import RotatingFileHandler
+import argparse
 from dotenv import load_dotenv
 from pathlib import Path
-from src.query import QueryBuilder
-from src.service import AppService
-from src.bot.router import CommandRouter
+from src.queries.etl_query import ETLQuery
+from src.queries.bot_query import BotQuery
+from src.queries.sqlite_query import LocationFinder
+from src.service import BotService
 from src.bot.bot_state_handler import BotStateHandler
+from src.bot.location_flow_handler import LocationFlowHandler
+from src.bot.bot_respond_handler import BotRespondHandler
 from src.bot.bot_handler import BotHandler
 
 
@@ -48,22 +52,48 @@ def get_env(key: str) -> str:
     return value
 
 
-async def run_app(db_url: str, bot_token: str) -> None:
-    query_builder = QueryBuilder()
-    await query_builder.setup_db(db_url)
-    app_service = AppService(query_builder)
-    router = CommandRouter(app_service)
-    bot_state_handler = BotStateHandler(query_builder)
-    bot_handler = BotHandler(router, bot_state_handler)
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="prakiraan-cuaca-bot")
+    parser.add_argument("--build-local-db", action="store_true", default=False)
+    return parser
+
+
+async def run_app(
+    parser: argparse.ArgumentParser,
+    etl_db_url: str,
+    bot_db_url: str,
+    local_db_url: str,
+    bot_token: str,
+) -> None:
+    args = parser.parse_args()
+
+    etl_query = ETLQuery()
+    bot_query = BotQuery()
+    location_finder = LocationFinder()
+    await etl_query.setup_etl_db(etl_db_url)
+    await bot_query.setup_bot_db(bot_db_url)
+    await location_finder.setup_local_db(local_db_url)
+    if args.build_local_db:
+        await location_finder.start_csv_to_local_db_transformation(
+            Path("adm4_codes/jawa_barat.csv")
+        )
+    bot_service = BotService(etl_query, bot_query)
+    bot_state_handler = BotStateHandler(bot_query)
+    location_flow_handler = LocationFlowHandler(location_finder)
+    bot_respond_handler = BotRespondHandler(bot_service, location_flow_handler)
+    bot_handler = BotHandler(bot_respond_handler, bot_state_handler)
     await bot_handler.run_bot(bot_token)
 
 
 def main() -> None:
     setup_logging()
     load_dotenv()
-    db_url = get_env("DATABASE_URL")
+    etl_db_url = get_env("ETL_DATABASE_URL")
+    bot_db_url = get_env("BOT_DATABASE_URL")
+    local_db_url = get_env("LOCAL_DATABASE_URL")
     bot_token = get_env("BOT_TOKEN")
-    asyncio.run(run_app(db_url, bot_token))
+    parser = build_parser()
+    asyncio.run(run_app(parser, etl_db_url, bot_db_url, local_db_url, bot_token))
 
 
 if __name__ == "__main__":
