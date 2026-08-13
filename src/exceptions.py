@@ -69,6 +69,16 @@ class EmptyCommandError(BotHandlerError):
         super().__init__(chat_id, "Error: command can't be empty")
 
 
+class NoForecastResultError(BotHandlerError):
+    """
+    Raised when the weather forecast is not found
+    for this specific adm4_code and datetime_range
+    """
+
+    def __init__(self, chat_id: int, message: str) -> None:
+        super().__init__(chat_id, message)
+
+
 class InvalidCommandError(BotHandlerError):
     """Raised when user send invalid command"""
 
