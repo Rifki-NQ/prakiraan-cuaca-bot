@@ -1,6 +1,5 @@
 import logging
 import asyncio
-from typing import TypeVar
 from collections.abc import AsyncIterable
 from datetime import datetime, timedelta
 from src.models.dt_model import DatetimeModel
@@ -12,42 +11,30 @@ from src.models.protocols import (
     BotQueryProtocol,
 )
 from src.utils import BOT_DATETIME
-from src.exceptions import DependencyMissingError
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T")
 
 
 class BotService:
     def __init__(
         self,
-        etl_query: ETLQueryProtocol | None = None,
-        bot_query: BotQueryProtocol | None = None,
+        etl_query: ETLQueryProtocol,
+        bot_query: BotQueryProtocol,
     ) -> None:
-        """Convert the dependency into each own dependency name when it's None."""
-        self.etl_query = etl_query if etl_query else "ETLQuery"
-        self.bot_query = bot_query if bot_query else "BotQuery"
+        self.etl_query = etl_query
+        self.bot_query = bot_query
 
     async def create_or_update_user(self, user: BotUserModel) -> None:
-        bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.create_or_update_user_state.__qualname__
-        )
-        await bot_query.insert_or_update_user(user)
+        await self.bot_query.insert_or_update_user(user)
 
     async def get_user(self, chat_id: int) -> BotUserModel | None:
-        bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.get_user.__qualname__
-        )
-        query_result = await bot_query.get_user(chat_id)
+        query_result = await self.bot_query.get_user(chat_id)
         if query_result is None:
             return None
         return BotUserModel(**query_result._mapping)  # pyright: ignore[reportPrivateUsage]
 
     async def resolve_user_location_state(self, chat_id: int) -> BotUserStateContext:
-        bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.resolve_user_location_state.__qualname__
-        )
-        initial_user_state = await bot_query.get_user_state(chat_id)
+        initial_user_state = await self.bot_query.get_user_state(chat_id)
         if initial_user_state is None:
             return BotUserStateContext(
                 user_location_state=UserLocationState.NO_STATE, bot_user_state=None
@@ -59,16 +46,10 @@ class BotService:
         )
 
     async def create_or_update_user_state(self, user_state: BotUserStateModel) -> None:
-        bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.create_or_update_user_state.__qualname__
-        )
-        await bot_query.insert_or_update_user_state(user_state)
+        await self.bot_query.insert_or_update_user_state(user_state)
 
     async def get_user_state(self, chat_id: int) -> BotUserStateModel | None:
-        bot_query = self._get_dependency_or_raise(
-            self.bot_query, self.get_user_state.__qualname__
-        )
-        query_result = await bot_query.get_user_state(chat_id)
+        query_result = await self.bot_query.get_user_state(chat_id)
         if query_result is None:
             return None
         return BotUserStateModel(**query_result._mapping)  # pyright: ignore[reportPrivateUsage]
@@ -90,10 +71,7 @@ class BotService:
     async def _yield_forecast(
         self, adm4_code: str, dt_range: tuple[datetime, datetime]
     ) -> AsyncIterable[ForecastModel]:
-        etl_query = self._get_dependency_or_raise(
-            self.etl_query, self._yield_forecast.__qualname__
-        )
-        rows = await etl_query.get_forecast_by_range(adm4_code, dt_range)
+        rows = await self.etl_query.get_forecast_by_range(adm4_code, dt_range)
         async for row in rows:
             yield ForecastModel(**row._mapping)  # pyright: ignore[reportPrivateUsage]
             await asyncio.sleep(0)
@@ -118,11 +96,3 @@ class BotService:
             return UserLocationState.NO_VILLAGE
         else:
             return UserLocationState.COMPLETE
-
-    def _get_dependency_or_raise(self, dependency: T | str, method_name: str) -> T:
-        """Used to get dependency for the method, raise error if the dependency is str."""
-        if isinstance(
-            dependency, str
-        ):  # the str in dependency means it's missing the actual dependency
-            raise DependencyMissingError(dependency, method_name)
-        return dependency

@@ -14,16 +14,6 @@ class QueryError(DomainError):
     pass
 
 
-class DependencyMissingError(DomainError):
-    """Raised when the needed dependency is missing for a method"""
-
-    def __init__(self, dependency_name: str, method_name: str) -> None:
-        self.dependency_name = dependency_name
-        self.method_name = method_name
-
-        super().__init__(f"Error: {dependency_name} is required for {method_name}")
-
-
 class BotHandlerError(DomainError):
     """Base class for all bot handler error"""
 
