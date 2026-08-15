@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import time
 from logging.handlers import RotatingFileHandler
 import argparse
 from dotenv import load_dotenv
@@ -13,6 +14,9 @@ from src.bot.bot_state_handler import BotStateHandler
 from src.bot.location_flow_handler import LocationFlowHandler
 from src.bot.bot_respond_handler import BotRespondHandler
 from src.bot.bot_handler import BotHandler
+
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging() -> None:
@@ -93,8 +97,13 @@ def main() -> None:
     local_db_url = get_env("LOCAL_DATABASE_URL")
     bot_token = get_env("BOT_TOKEN")
     parser = build_parser()
-    asyncio.run(run_app(parser, etl_db_url, bot_db_url, local_db_url, bot_token))
-
+    while True:
+        try:
+            asyncio.run(run_app(parser, etl_db_url, bot_db_url, local_db_url, bot_token))
+            break
+        except OSError as e:
+            logger.critical("OS-level error occured, retrying in 60s", exc_info=e)
+            time.sleep(60)
 
 if __name__ == "__main__":
     main()
