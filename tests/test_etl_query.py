@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, AsyncIterable
 from dotenv import load_dotenv
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from tests.tests_db import BotTestDB
+from tests.tests_db import ETLTestDB
 from tests.tests_utils import drop_all_tables
 from tests.mock_data.mock_db_data import (
     MOCK_WEATHER_FORECAST_DATA,
@@ -46,9 +46,9 @@ async def etl_query(etl_engine: AsyncEngine) -> AsyncGenerator[ETLQuery, None]:
     is because the test database is filled with predictable, mocked data.
     """
     etl_query = ETLQuery()
-    test_db = BotTestDB()
+    test_db = ETLTestDB()
     try:
-        await test_db.setup_test_db(test_db_url, etl_engine)
+        await test_db.setup_etl_test_db(test_db_url, etl_engine)
         # seed/fill the test db with mocked data
         await test_db.seed_location_test_table(MOCK_FORECAST_LOCATION_DATA)
         await test_db.seed_forecast_test_table(MOCK_WEATHER_FORECAST_DATA)
@@ -144,9 +144,5 @@ async def test_get_forecast_by_range_raise_empty_result(etl_query: ETLQuery) -> 
         # this raises because the AsyncIterable is iterated or consumed
         [r async for r in results]
     assert exc_info.value.query.get("adm4_code") == mock_info["adm4_code"]
-    assert exc_info.value.query.get("start_dt") == dt_range[0].strftime(
-        "%d-%m-%Y %H:%M:%S"
-    )
-    assert exc_info.value.query.get("end_dt") == dt_range[1].strftime(
-        "%d-%m-%Y %H:%M:%S"
-    )
+    assert exc_info.value.query.get("start_dt") == dt_range[0].strftime("%d-%m-%Y %H:%M:%S")
+    assert exc_info.value.query.get("end_dt") == dt_range[1].strftime("%d-%m-%Y %H:%M:%S")

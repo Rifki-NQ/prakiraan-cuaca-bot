@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class BotTestDBContext:
+class ETLTestDBContext:
     engine: AsyncEngine
     forecast_table: Table
     location_table: Table
 
 
-class BotTestDB:
+class ETLTestDB:
     def __init__(self) -> None:
-        self._db: BotTestDBContext | None
+        self._db: ETLTestDBContext | None
 
-    async def setup_test_db(self, test_db_url: str, etl_engine: AsyncEngine) -> None:
+    async def setup_etl_test_db(self, test_db_url: str, etl_engine: AsyncEngine) -> None:
         engine = create_async_engine(test_db_url)
         metadata = MetaData()
         # copy the tables from the etl_engine/db
@@ -33,7 +33,7 @@ class BotTestDB:
             await conn.run_sync(metadata.reflect)
         async with engine.begin() as conn:
             await conn.run_sync(metadata.create_all)
-        self._db = BotTestDBContext(
+        self._db = ETLTestDBContext(
             engine=engine,
             forecast_table=metadata.tables["weather_forecast"],
             location_table=metadata.tables["forecast_location"],
@@ -57,7 +57,7 @@ class BotTestDB:
             await conn.execute(stmt)
             logger.debug("mocked_data for location_table inserted")
 
-    def _get_db(self) -> BotTestDBContext:
+    def _get_db(self) -> ETLTestDBContext:
         if self._db is None:
             raise DBNotInitializedError("setup_test_db() has not called yet")
         return self._db
