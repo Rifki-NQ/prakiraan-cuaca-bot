@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 class ETLQuery:
+    RESULT_YIELD_PER_VALUE = 24  # server-side rows-per-yield streaming value
+
     def __init__(self) -> None:
         self._db: ETLDBContext | None = None
 
@@ -65,7 +67,9 @@ class ETLQuery:
                     )
                     .order_by(db.forecast_table.c.forecast_datetime)
                 )
-                result = await conn.stream(stmt, execution_options={"yield_per": 24})
+                result = await conn.stream(
+                    stmt, execution_options={"yield_per": self.RESULT_YIELD_PER_VALUE}
+                )
                 total_yielded = 0
                 async for row in result:
                     yield row
@@ -75,6 +79,7 @@ class ETLQuery:
                 if total_yielded == 0:
                     raise EmptyQueryResultError(
                         {
+                            "adm4_code": adm4_code,
                             "start_dt": start_dt.strftime("%d-%m-%Y %H:%M:%S"),
                             "end_dt": end_dt.strftime("%d-%m-%Y %H:%M:%S"),
                         }
