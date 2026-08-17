@@ -3,9 +3,12 @@ import pytest_asyncio
 import csv
 import logging
 from collections.abc import AsyncGenerator
-from sqlalchemy import inspect, select, func, Connection
+from sqlalchemy import inspect, select, func, Connection, Table
+from sqlalchemy.ext.asyncio import AsyncEngine
 from tests.paths import temp_local_db_path, adm4_codes_csv_path
+from tests.tests_utils import get_tables_name
 from src.queries.sqlite_query import LocationFinder
+from src.models.contexts import LocalDBContext
 from src.exceptions import EmptyQueryResultError, DBNotInitializedError
 
 
@@ -32,6 +35,27 @@ async def test_get_local_db_without_setup_first() -> None:
     location_finder = LocationFinder()
     with pytest.raises(DBNotInitializedError):
         location_finder._get_local_db()  # pyright: ignore[reportPrivateUsage]
+
+
+async def test_local_db_attributes_after_setup_local_db(
+    location_finder: LocationFinder,
+) -> None:
+    # setup_local_db() is already called in the location_finder fixture
+    local_db = location_finder._get_local_db()  # pyright: ignore[reportPrivateUsage]
+    assert local_db is not None
+    assert isinstance(local_db, LocalDBContext)
+    assert isinstance(local_db.engine, AsyncEngine)
+    assert isinstance(local_db.location_table, Table)
+    assert local_db.location_table.name == "forecast_location"
+
+
+async def test_setup_local_db_create_table_in_db(
+    location_finder: LocationFinder,
+) -> None:
+    # setup_local_db() is already called in the location_finder fixture
+    local_db = location_finder._get_local_db()  # pyright: ignore[reportPrivateUsage]
+    table_names_from_db = await get_tables_name(local_db.engine)
+    assert local_db.location_table.name in table_names_from_db
 
 
 async def test_start_csv_to_local_db_transformation_db_file_created(
