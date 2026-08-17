@@ -20,14 +20,24 @@ class ETLTestDBContext:
     location_table: Table
 
 
+@dataclass
+class BotTestDBContext:
+    engine: AsyncEngine
+    bot_offset_table: Table
+    bot_user_table: Table
+    bot_user_state_table: Table
+
+
 class ETLTestDB:
     def __init__(self) -> None:
         self._db: ETLTestDBContext | None
 
-    async def setup_etl_test_db(self, test_db_url: str, etl_engine: AsyncEngine) -> None:
+    async def setup_etl_test_db(
+        self, test_db_url: str, etl_engine: AsyncEngine
+    ) -> None:
         engine = create_async_engine(test_db_url)
         metadata = MetaData()
-        # copy the tables from the etl_engine/db
+        # copy the tables schema from the etl_engine
         # to the test db metadata
         async with etl_engine.connect() as conn:
             await conn.run_sync(metadata.reflect)
@@ -46,7 +56,7 @@ class ETLTestDB:
         async with db.engine.begin() as conn:
             stmt = insert(db.forecast_table).on_conflict_do_nothing()
             await conn.execute(stmt, self._normalize_forecast_mock_data(mocked_data))
-            logger.debug("mocked_data for forecast_table inserted")
+        logger.debug("mocked_data for forecast_table inserted")
 
     async def seed_location_test_table(self, mocked_data: dict[str, Any]) -> None:
         db = self._get_db()
@@ -55,7 +65,7 @@ class ETLTestDB:
                 insert(db.location_table).on_conflict_do_nothing().values(mocked_data)
             )
             await conn.execute(stmt)
-            logger.debug("mocked_data for location_table inserted")
+        logger.debug("mocked_data for location_table inserted")
 
     def _get_db(self) -> ETLTestDBContext:
         if self._db is None:
@@ -84,3 +94,49 @@ class ETLTestDB:
             )
             normalized.append(item)
         return normalized
+
+
+class BotTestDB:
+    def __init__(self) -> None:
+        self._db: BotTestDBContext | None
+
+    async def setup_bot_test_db(
+        self, test_db_url: str, bot_engine: AsyncEngine
+    ) -> None:
+        engine = create_async_engine(test_db_url)
+        metadata = MetaData()
+        # copy the tables schema from bot_engine
+        # to the test db metadata
+        async with bot_engine.connect() as conn:
+            await conn.run_sync(metadata.reflect)
+        async with engine.begin() as conn:
+            await conn.run_sync(metadata.create_all)
+        self._db = BotTestDBContext(
+            engine=engine,
+            bot_offset_table=metadata.tables["bot_offset"],
+            bot_user_table=metadata.tables["bot_user"],
+            bot_user_state_table=metadata.tables["bot_user_state"],
+        )
+
+    async def seed_bot_test_tables(
+        self,
+        mocked_bot_offset_data: dict[str, Any],
+        mocked_bot_user_data: dict[str, Any],
+        mock_bot_user_state_data: dict[str, Any],
+    ) -> None:
+        db = self._get_db()
+        table_and_mock_data = {
+            db.bot_offset_table: mocked_bot_offset_data,
+            db.bot_user_table: mocked_bot_user_data,
+            db.bot_user_state_table: mock_bot_user_state_data,
+        }
+        async with db.engine.begin() as conn:
+            for table, mock_data in table_and_mock_data.items():
+                stmt = insert(table).on_conflict_do_nothing().values(mock_data)
+                await conn.execute(stmt)
+        logger.info("mocked_data for bot test tables inserted")
+
+    def _get_db(self) -> BotTestDBContext:
+        if self._db is None:
+            raise DBNotInitializedError("setup_test_db() has not called yet")
+        return self._db

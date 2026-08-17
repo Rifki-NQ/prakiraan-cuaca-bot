@@ -144,5 +144,9 @@ async def test_get_forecast_by_range_raise_empty_result(etl_query: ETLQuery) -> 
         # this raises because the AsyncIterable is iterated or consumed
         [r async for r in results]
     assert exc_info.value.query.get("adm4_code") == mock_info["adm4_code"]
-    assert exc_info.value.query.get("start_dt") == dt_range[0].strftime("%d-%m-%Y %H:%M:%S")
-    assert exc_info.value.query.get("end_dt") == dt_range[1].strftime("%d-%m-%Y %H:%M:%S")
+    assert exc_info.value.query.get("start_dt") == dt_range[0].strftime(
+        "%d-%m-%Y %H:%M:%S"
+    )
+    assert exc_info.value.query.get("end_dt") == dt_range[1].strftime(
+        "%d-%m-%Y %H:%M:%S"
+    )
