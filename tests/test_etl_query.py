@@ -4,9 +4,10 @@ from unittest.mock import patch
 from collections.abc import AsyncGenerator, AsyncIterable
 from dotenv import load_dotenv
 from datetime import datetime
+from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from tests.tests_db import ETLTestDB
-from tests.tests_utils import drop_all_tables
+from tests.tests_utils import drop_all_tables, get_tables_name
 from tests.mock_data.mock_db_data import (
     MOCK_WEATHER_FORECAST_DATA,
     MOCK_FORECAST_LOCATION_DATA,
@@ -14,6 +15,7 @@ from tests.mock_data.mock_db_data import (
 )
 from src.main import get_env
 from src.queries.etl_query import ETLQuery
+from src.models.contexts import ETLDBContext
 from src.exceptions import (
     InvalidDatetimeRangeError,
     DBNotInitializedError,
@@ -39,11 +41,12 @@ async def etl_engine() -> AsyncGenerator[AsyncEngine, None]:
 @pytest_asyncio.fixture
 async def etl_query(etl_engine: AsyncEngine) -> AsyncGenerator[ETLQuery, None]:
     """
-    Return an object of etl_query, with the internal function:
-    _get_db() patched with test_db attributes.
+    Return an object of ETLQuery, with the internal function:
+    _get_db() patched with ETLTestDB._get_db().
 
-    The reason why the database gets patched with it's own test database
-    is because the test database is filled with predictable, mocked data.
+    The reason why ETLQuery._get_db() gets patched is because
+    ETLTestDB uses it's own database, with the tables schema reflected from the production db
+    and data seeded using predictable, mocked_data.
     """
     etl_query = ETLQuery()
     test_db = ETLTestDB()
@@ -57,9 +60,23 @@ async def etl_query(etl_engine: AsyncEngine) -> AsyncGenerator[ETLQuery, None]:
     finally:
         # drop all tables then dispose the test_db engine
         test_db_engine = test_db._get_db().engine  # pyright: ignore[reportPrivateUsage]
-        async with test_db_engine.begin() as conn:
-            await drop_all_tables(conn)
+        await drop_all_tables(test_db_engine)
         await test_db_engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def prod_etl_query() -> AsyncGenerator[ETLQuery, None]:
+    """Return an object of ETLQuery, connected with actual production database."""
+    etl_query = ETLQuery()
+    # this method reflect then create the tables if not exists on the prod_db
+    await etl_query.setup_etl_db(etl_db_url)
+    db = etl_query._get_db()  # pyright: ignore[reportPrivateUsage]
+    try:
+        yield etl_query
+    finally:
+        # warning: do not drop the tables
+        # since this is production database!
+        await db.engine.dispose()
 
 
 @pytest.mark.parametrize(
@@ -80,6 +97,26 @@ def test_get_db_before_setup_etl_db() -> None:
     etl_query = ETLQuery()
     with pytest.raises(DBNotInitializedError):
         etl_query._get_db()  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.prod_db
+def test_db_attributes_after_setup_etl_db(prod_etl_query: ETLQuery) -> None:
+    db = prod_etl_query._get_db()  # pyright: ignore[reportPrivateUsage]
+    assert db is not None
+    assert isinstance(db, ETLDBContext)
+    assert isinstance(db.engine, AsyncEngine)
+    assert isinstance(db.location_table, Table)
+    assert isinstance(db.forecast_table, Table)
+    assert db.location_table.name == "forecast_location"
+    assert db.forecast_table.name == "weather_forecast"
+
+
+@pytest.mark.prod_db
+async def test_setup_etl_db_create_tables_in_db(prod_etl_query: ETLQuery) -> None:
+    db = prod_etl_query._get_db()  # pyright: ignore[reportPrivateUsage]
+    table_names_from_db = await get_tables_name(db.engine)
+    assert db.location_table.name in table_names_from_db
+    assert db.forecast_table.name in table_names_from_db
 
 
 async def test_get_forecast_by_range_return_expected_type_and_total_rows(
