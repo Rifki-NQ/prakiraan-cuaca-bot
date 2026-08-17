@@ -31,7 +31,8 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
-    "integration: mark test as integration test"
+    "integration: mark test as integration test",
+    "prod_db: hits the production database directly (reads/creates tables, never drops)"
 ]
 
 [tool.mypy]
