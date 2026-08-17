@@ -1322,3 +1322,29 @@ MOCK_WEATHER_FORECAST_DATA: list[dict[str, Any]] = [
         "created_at": "2026-08-15 10:35:14.927413",
     },
 ]
+
+
+MOCK_BOT_OFFSET_DATA: dict[str, Any] = {
+    "bot_token": "fake_bot_token",
+    "offset": 68841135,
+    "updated_at": datetime(2026, 8, 17, 0, 13, 32, 344340),
+}
+
+
+MOCK_BOT_USER_DATA: dict[str, Any] = {
+    "chat_id": 6003667766,
+    "username": None,
+    "adm4_code": "32.16.20.2003",
+    "updated_at": datetime(2026, 8, 15, 16, 14, 30, 188748),
+    "created_at": datetime(2026, 8, 15, 16, 14, 30, 188748),
+}
+
+
+MOCK_BOT_USER_STATE_DATA: dict[str, Any] = {
+    "chat_id": 6003667766,
+    "kabupaten_atau_kota": "kabupaten bekasi",
+    "kecamatan": "cikarang pusat",
+    "desa_atau_kelurahan": "pasiranji",
+    "updated_at": datetime(2026, 8, 15, 16, 14, 8, 366450),
+    "created_at": datetime(2026, 8, 15, 16, 13, 51, 495296),
+}
