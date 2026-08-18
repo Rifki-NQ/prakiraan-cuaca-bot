@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from typing import Literal, assert_never
+from collections.abc import Awaitable, Callable
 from src.bot import message_container
 from src.bot.router import route_command
 from src.bot.forecast_responder import get_merged_forecasts
@@ -52,46 +53,29 @@ class BotRespondHandler:
                 case BotAction.ASK_VILLAGE:
                     messages.append(message_container.ASK_VILLAGE)
                 case BotAction.RECEIVE_INPUT_FOR_CITY_OR_REGENCY:
-                    try:
-                        flow_result = await self.location_flow_handler.handle_input_for_city_or_regency(
+                    messages.append(
+                        await self._handle_input_for_city_or_regency(
                             chat_id, input_value
                         )
-                        await self._persist_location_result(chat_id, flow_result)
-                        messages.append(flow_result.message)
-                    except DataIntegrityError as e:
-                        # reset the location state of this user
-                        await self._reset_user_state_data(e.chat_id)
-                        raise
+                    )
                 case BotAction.RECEIVE_INPUT_FOR_SUBDISTRICT:
-                    try:
-                        flow_result = await self.location_flow_handler.handle_input_for_subdistrict(
+                    messages.append(
+                        await self._handle_input_for_subdistrict_and_village(
                             chat_id,
                             bot_user_state,
                             input_value,
+                            self.location_flow_handler.handle_input_for_subdistrict,
                         )
-                        await self._persist_location_result(chat_id, flow_result)
-                        messages.append(flow_result.message)
-                    except DataIntegrityError as e:
-                        # reset the location state of this user
-                        await self._reset_user_state_data(e.chat_id)
-                        raise
+                    )
                 case BotAction.RECEIVE_INPUT_FOR_VILLAGE:
-                    try:
-                        village_flow_result = (
-                            await self.location_flow_handler.handle_input_for_village(
-                                chat_id,
-                                bot_user_state,
-                                input_value,
-                            )
+                    messages.append(
+                        await self._handle_input_for_subdistrict_and_village(
+                            chat_id,
+                            bot_user_state,
+                            input_value,
+                            self.location_flow_handler.handle_input_for_village,
                         )
-                        await self._persist_location_result(
-                            chat_id, village_flow_result
-                        )
-                        messages.append(village_flow_result.message)
-                    except DataIntegrityError as e:
-                        # reset the location state of this user
-                        await self._reset_user_state_data(e.chat_id)
-                        raise
+                    )
                 case BotAction.TELLS_USER_NO_NEED_FOR_INPUT:
                     messages.append(message_container.TELLS_USER_NO_NEED_FOR_INPUT)
                 case BotAction.TELLS_USER_TO_SET_LOCATION:
@@ -99,32 +83,9 @@ class BotRespondHandler:
                 case BotAction.TELLS_USER_TO_FINISH_SET_LOCATION:
                     messages.append(message_container.TELLS_USER_TO_FINISH_SET_LOCATION)
                 case BotAction.SHOW_USER_CURRENT_LOCATION:
-                    try:
-                        messages.append(
-                            await self._get_user_then_get_full_address(chat_id)
-                        )
-                    except DataIntegrityError as e:
-                        # try restoring the user data by using user state data
-                        restore_result = await self._handle_when_user_data_is_missing(
-                            chat_id
-                        )
-                        if restore_result == UserDataRestorationResult.FAILED:
-                            # reset all data of this user
-                            # because at this point, the data for this user
-                            # is considered corrupted or missing
-                            await self._reset_user_state_data(
-                                e.chat_id, with_user_data=True
-                            )
-                            raise
-                        try:
-                            messages.append(
-                                await self._get_user_then_get_full_address(chat_id)
-                            )
-                        except DataIntegrityError as e:
-                            await self._reset_user_state_data(
-                                e.chat_id, with_user_data=True
-                            )
-                            raise
+                    messages.append(
+                        await self._handle_show_user_current_location(chat_id)
+                    )
                 case BotAction.SHOW_WELCOME_BACK_INTRO:
                     messages.append(message_container.SHOW_WELCOME_BACK_INTRO)
                 case BotAction.SHOW_TODAY_FORECASTS:
@@ -136,6 +97,59 @@ class BotRespondHandler:
                 case _:
                     assert_never(action)
         return "".join(messages)
+
+    async def _handle_input_for_city_or_regency(
+        self, chat_id: int, input_value: str | None
+    ) -> str:
+        try:
+            flow_result = (
+                await self.location_flow_handler.handle_input_for_city_or_regency(
+                    chat_id, input_value
+                )
+            )
+            await self._persist_location_result(chat_id, flow_result)
+            return flow_result.message
+        except DataIntegrityError as e:
+            # reset the location state of this user
+            await self._reset_user_state_data(e.chat_id)
+            raise
+
+    async def _handle_input_for_subdistrict_and_village(
+        self,
+        chat_id: int,
+        user_state: BotUserStateModel | None,
+        input_value: str | None,
+        flow_handler: Callable[
+            [int, BotUserStateModel | None, str | None],
+            Awaitable[LocationFlowResult | LocationFlowResultComplete],
+        ],
+    ) -> str:
+        try:
+            flow_result = await flow_handler(chat_id, user_state, input_value)
+            await self._persist_location_result(chat_id, flow_result)
+            return flow_result.message
+        except DataIntegrityError as e:
+            # reset the location state of this user
+            await self._reset_user_state_data(e.chat_id)
+            raise
+
+    async def _handle_show_user_current_location(self, chat_id: int) -> str:
+        try:
+            return await self._get_user_then_get_full_address(chat_id)
+        except DataIntegrityError as e:
+            # try restoring the user data by using user state data
+            restore_result = await self._handle_when_user_data_is_missing(chat_id)
+            if restore_result == UserDataRestorationResult.FAILED:
+                # reset all data of this user
+                # because at this point, the data for this user
+                # is considered corrupted or missing
+                await self._reset_user_state_data(e.chat_id, with_user_data=True)
+                raise
+            try:
+                return await self._get_user_then_get_full_address(chat_id)
+            except DataIntegrityError as e:
+                await self._reset_user_state_data(e.chat_id, with_user_data=True)
+                raise
 
     async def _get_user_then_get_full_address(self, chat_id: int) -> str:
         user_data = await self.bot_service.get_user(chat_id)
@@ -176,8 +190,10 @@ class BotRespondHandler:
         In case user or user.kode_adm4 missing from db, try to restore it
         using the user state data.
         """
+        logger.debug(f"start restore attempt for missing user {chat_id} data")
         user_state = await self.bot_service.get_user_state(chat_id)
         if user_state is None:
+            logger.debug(f"restore attempt for missing user {chat_id} data failed")
             return UserDataRestorationResult.FAILED
         try:
             adm4_code = await self.location_flow_handler.get_adm4_code_or_raise(
@@ -186,8 +202,10 @@ class BotRespondHandler:
             await self.bot_service.create_or_update_user(
                 BotUserModel(chat_id, adm4_code=adm4_code)
             )
+            logger.debug(f"restore attempt for missing user {chat_id} data success")
             return UserDataRestorationResult.SUCCESS
         except DataIntegrityError:
+            logger.debug(f"restore attempt for missing user {chat_id} data failed")
             return UserDataRestorationResult.FAILED
 
     async def _reset_user_state_data(
@@ -204,5 +222,7 @@ class BotRespondHandler:
                     BotUserStateModel(chat_id)
                 ),
             )
+            logger.debug(f"user {chat_id} state and data reset")
             return
         await self.bot_service.create_or_update_user_state(BotUserStateModel(chat_id))
+        logger.debug(f"user {chat_id} state reset")
