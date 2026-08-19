@@ -99,11 +99,14 @@ def main() -> None:
     parser = build_parser()
     while True:
         try:
-            asyncio.run(run_app(parser, etl_db_url, bot_db_url, local_db_url, bot_token))
+            asyncio.run(
+                run_app(parser, etl_db_url, bot_db_url, local_db_url, bot_token)
+            )
             break
         except OSError as e:
             logger.critical("OS-level error occured, retrying in 60s", exc_info=e)
             time.sleep(60)
+
 
 if __name__ == "__main__":
     main()

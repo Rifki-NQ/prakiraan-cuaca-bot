@@ -23,6 +23,25 @@ class BotHandlerError(DomainError):
         super().__init__(message)
 
 
+class ActionRegistryLookupError(DomainError):
+    """
+    Raised by src/bot_router.route_command() when no BotAction is
+    registered for the incoming (command, user_state, need_input_value)
+    combination.
+    """
+
+    def __init__(
+        self, command: str, user_state: str, has_input_value: bool
+    ) -> None:
+        self.command = command
+        self.user_state = user_state
+        self.has_input_value = has_input_value
+        super().__init__(
+            "Error: no BotAction registered for this combination"
+            f" (command: {command}, user_state: {user_state}, has_input_value: {str(has_input_value)})"
+        )
+
+
 class InvalidDatetimeRangeError(QueryError):
     """Raised when the start datetime is greater than the end datetime"""
 
