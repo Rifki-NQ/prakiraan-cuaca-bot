@@ -30,9 +30,7 @@ class ActionRegistryLookupError(DomainError):
     combination.
     """
 
-    def __init__(
-        self, command: str, user_state: str, has_input_value: bool
-    ) -> None:
+    def __init__(self, command: str, user_state: str, has_input_value: bool) -> None:
         self.command = command
         self.user_state = user_state
         self.has_input_value = has_input_value

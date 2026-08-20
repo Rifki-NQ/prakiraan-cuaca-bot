@@ -3,7 +3,7 @@ import asyncio
 from typing import Literal, assert_never
 from collections.abc import Awaitable, Callable
 from src.bot import message_container
-from src.bot.router import route_command
+from src.bot.bot_router import route_command
 from src.bot.forecast_responder import get_merged_forecasts
 from src.models.protocols import (
     BotServiceProtocol,
@@ -40,7 +40,7 @@ class BotRespondHandler:
         )
         bot_user_state = user_location_context.bot_user_state
         user_location_state = user_location_context.user_location_state  # enums object
-        actions = route_command(command, user_location_state)
+        actions = route_command(command, user_location_state, input_value)
         messages: list[str] = []
         for action in actions:
             match action:

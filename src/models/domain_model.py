@@ -1,3 +1,4 @@
+from src.models.enums import Commands, BotAction, UserLocationState
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
@@ -64,3 +65,13 @@ class LocationFlowResultComplete:
     message: str
     bot_user_state: BotUserStateModel
     adm4_code: str
+
+
+@dataclass(frozen=True)
+class ActionEntry:
+    command: Commands
+    # None in user_state means this bot_action does not care
+    # whether this user has user_state or not
+    user_state: UserLocationState | None
+    need_input_value: bool
+    bot_action: tuple[BotAction, ...]
