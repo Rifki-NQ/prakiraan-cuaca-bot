@@ -40,13 +40,14 @@ class LocationFlowHandler:
                 )
             )
         if len(result) == 1:
-            subdistricts = await self._get_subdistricts_or_raise(chat_id, result[0])
             return LocationFlowResult(
                 message=merge_messages(
                     message_container.notify_city_or_regency_updated(result[0]),
                     # immediately proceed to show list of the subdistricts
                     message_container.notify_to_choose_subdistrict(
-                        self._merge_list(subdistricts)
+                        await self.get_merged_subdistrict_list(
+                            chat_id, BotUserStateModel(chat_id, result[0])
+                        )
                     ),
                 ),
                 bot_user_state=BotUserStateModel(
@@ -77,15 +78,17 @@ class LocationFlowHandler:
         )
         # check whether user inputted value exists in the query result
         if subdistrict in subdistricts:
-            villages = await self._get_villages_or_raise(
-                chat_id, user_state.kabupaten_atau_kota, subdistrict
-            )
             return LocationFlowResult(
                 message=merge_messages(
                     message_container.notify_subdistrict_updated(subdistrict),
                     # immediately proceed to show list of the villages
                     message_container.notify_to_choose_village(
-                        self._merge_list(villages)
+                        await self.get_merged_village_list(
+                            chat_id,
+                            BotUserStateModel(
+                                chat_id, user_state.kabupaten_atau_kota, subdistrict
+                            ),
+                        )
                     ),
                 ),
                 bot_user_state=BotUserStateModel(
@@ -200,9 +203,45 @@ class LocationFlowHandler:
             )
             raise_data_integrity_error(chat_id, "entire")
 
+    async def get_merged_subdistrict_list(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> str:
+        # reason why user_state instead of direct kabupaten_atau_kota:
+        # because this method is also meant to be called outside of this class
+        user_state = self._get_user_state_or_raise(chat_id, user_state)
+        assert user_state.kabupaten_atau_kota is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
+        """Return a merged list of subdistricts."""
+        subdistricts = await self._get_subdistricts_or_raise(
+            chat_id, user_state.kabupaten_atau_kota
+        )
+        return self._merge_list(subdistricts)
+
+    async def get_merged_village_list(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> str:
+        # same reason for not direct kabupaten_atau_kota and kecamatan params
+        # with get_merged_subdistrict_list()
+        """Return a merged list of villages"""
+        user_state = self._get_user_state_or_raise(
+            chat_id, user_state, UserStateCheckLevel.SUBDISTRICT
+        )
+        assert user_state.kabupaten_atau_kota is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
+        assert user_state.kecamatan is not None, (
+            "_get_user_state_or_raise() guarantee this attribute is not None"
+        )
+        villages = await self._get_villages_or_raise(
+            chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan
+        )
+        return self._merge_list(villages)
+
     async def _get_subdistricts_or_raise(
         self, chat_id: int, city_or_regency: str
     ) -> list[str]:
+        """Return list of subdistricts, raise error if not found."""
         try:
             return await self.location_finder.search_subdistrict(city_or_regency)
         except EmptyQueryResultError as e:
@@ -215,6 +254,7 @@ class LocationFlowHandler:
     async def _get_villages_or_raise(
         self, chat_id: int, city_or_regency: str, subdistrict: str
     ) -> list[str]:
+        """Return list of villages, raise error if not found."""
         try:
             return await self.location_finder.search_village(
                 city_or_regency, subdistrict
@@ -227,6 +267,8 @@ class LocationFlowHandler:
             )
             raise_data_integrity_error(chat_id, "city_or_regency and subdistrict")
 
+    # TODO: make different dataclass with different Optional fields after
+    #       filtering it on this method to avoid duplicated, unnecessary assert obj.attr
     def _get_user_state_or_raise(
         self,
         chat_id: int,

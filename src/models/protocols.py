@@ -67,6 +67,12 @@ class LocationFlowHandlerProtocol(Protocol):
     async def get_adm4_code_or_raise(
         self, chat_id: int, user_state: BotUserStateModel | None
     ) -> str: ...
+    async def get_merged_subdistrict_list(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> str: ...
+    async def get_merged_village_list(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> str: ...
 
 
 class BotServiceProtocol(Protocol):

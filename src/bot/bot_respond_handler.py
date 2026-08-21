@@ -49,9 +49,21 @@ class BotRespondHandler:
                 case BotAction.ASK_CITY_OR_REGENCY:
                     messages.append(message_container.ASK_CITY_OR_REGENCY)
                 case BotAction.ASK_SUBDISTRICT:
-                    messages.append(message_container.ASK_SUBDISTRICT)
+                    messages.append(
+                        message_container.notify_to_choose_subdistrict(
+                            await self.location_flow_handler.get_merged_subdistrict_list(
+                                chat_id, bot_user_state
+                            )
+                        )
+                    )
                 case BotAction.ASK_VILLAGE:
-                    messages.append(message_container.ASK_VILLAGE)
+                    messages.append(
+                        message_container.notify_to_choose_village(
+                            await self.location_flow_handler.get_merged_village_list(
+                                chat_id, bot_user_state
+                            )
+                        )
+                    )
                 case BotAction.RECEIVE_INPUT_FOR_CITY_OR_REGENCY:
                     messages.append(
                         await self._handle_input_for_city_or_regency(
@@ -96,7 +108,7 @@ class BotRespondHandler:
                     )
                 case _:
                     assert_never(action)
-        return "".join(messages)
+        return "\n\n".join(messages)
 
     async def _handle_input_for_city_or_regency(
         self, chat_id: int, input_value: str | None
