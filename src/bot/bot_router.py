@@ -113,38 +113,43 @@ LOCATION_COMMAND_REGISTRY: list[ActionEntry] = [
 ]
 
 
-# TODO: move empty /input value detection from bot_respond_handler
-#       to bot_router
 INPUT_COMMAND_REGISTRY: list[ActionEntry] = [
     ActionEntry(
         command=Commands.INPUT,
         user_state=UserLocationState.NO_STATE,
-        need_input_value=False,
+        need_input_value=True,
         bot_action=(BotAction.RECEIVE_INPUT_FOR_CITY_OR_REGENCY,),
     ),
     ActionEntry(
         command=Commands.INPUT,
         user_state=UserLocationState.NO_CITY_OR_REGENCY,
-        need_input_value=False,
+        need_input_value=True,
         bot_action=(BotAction.RECEIVE_INPUT_FOR_CITY_OR_REGENCY,),
     ),
     ActionEntry(
         command=Commands.INPUT,
         user_state=UserLocationState.NO_SUBDISTRICT,
-        need_input_value=False,
+        need_input_value=True,
         bot_action=(BotAction.RECEIVE_INPUT_FOR_SUBDISTRICT,),
     ),
     ActionEntry(
         command=Commands.INPUT,
         user_state=UserLocationState.NO_VILLAGE,
-        need_input_value=False,
+        need_input_value=True,
         bot_action=(BotAction.RECEIVE_INPUT_FOR_VILLAGE,),
     ),
     ActionEntry(
         command=Commands.INPUT,
         user_state=UserLocationState.COMPLETE,
-        need_input_value=False,
+        need_input_value=True,
         bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT,),
+    ),
+    # what to show to user when they send /input without value
+    ActionEntry(
+        command=Commands.INPUT,
+        user_state=None,
+        need_input_value=False,
+        bot_action=(BotAction.TELLS_USER_TO_ADD_INPUT_VALUE,),
     ),
 ]
 

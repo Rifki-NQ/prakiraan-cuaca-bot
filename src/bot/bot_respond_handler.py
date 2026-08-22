@@ -90,6 +90,8 @@ class BotRespondHandler:
                     )
                 case BotAction.TELLS_USER_NO_NEED_FOR_INPUT:
                     messages.append(message_container.TELLS_USER_NO_NEED_FOR_INPUT)
+                case BotAction.TELLS_USER_TO_ADD_INPUT_VALUE:
+                    messages.append(message_container.TELLS_USER_TO_ADD_INPUT_VALUE)
                 case BotAction.TELLS_USER_TO_SET_LOCATION:
                     messages.append(message_container.TELLS_USER_TO_SET_LOCATION)
                 case BotAction.TELLS_USER_TO_FINISH_SET_LOCATION:
