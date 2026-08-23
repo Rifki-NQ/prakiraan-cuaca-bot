@@ -112,6 +112,10 @@ class BotRespondHandler:
                     messages.append(
                         await self._get_forecast_message(chat_id, "tomorrow")
                     )
+                case BotAction.TELLS_USER_NO_NEED_FOR_RESET:
+                    messages.append(message_container.TELLS_USER_NO_NEED_FOR_RESET)
+                case BotAction.RESET_USER_LOCATION:
+                    messages.append(await self._reset_location(chat_id))
                 case _:
                     assert_never(action)
         return "\n\n".join(messages)
@@ -187,7 +191,7 @@ class BotRespondHandler:
             )
         else:
             assert_never(forecast_time)
-            
+
     def _route_extra_help(self, help_value: str | None) -> str:
         assert help_value is not None, "bot_router guarantee this won't be None"
         match help_value:
@@ -201,7 +205,13 @@ class BotRespondHandler:
             case "tomorrow":
                 return message_container.SHOW_TOMORROW_COMMAND_HELP
             case _:
-                return message_container.show_invalid_extra_help_value_message(help_value)
+                return message_container.show_invalid_extra_help_value_message(
+                    help_value
+                )
+
+    async def _reset_location(self, chat_id: int) -> str:
+        await self._reset_user_state_data(chat_id)
+        return message_container.TELLS_USER_RESET_SUCCESS
 
     async def _persist_location_result(
         self, chat_id: int, flow_result: LocationFlowResult | LocationFlowResultComplete

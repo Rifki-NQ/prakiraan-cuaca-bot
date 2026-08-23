@@ -20,6 +20,8 @@ SHOW_HELP = """Available Commands:
     <b>show today weather forecast</b>
 /tomorrow
     <b>show tomorrow weather forecast</b>
+/reset
+    <b>reset current location</b>
 
 Extra help commands:
 /help location
@@ -29,7 +31,9 @@ Extra help commands:
 /help today
     <b>Show extra help for /today command</b>
 /help tomorrow
-    <b>Show extra help for /tomorrow command</b>"""
+    <b>Show extra help for /tomorrow command</b>
+/help reset
+    <b>Show extra help for /reset command"""
 
 
 SHOW_WELCOME_BACK_INTRO = """Welcome back to prakiraan-cuaca-bot project"""
@@ -48,6 +52,10 @@ TELLS_USER_TO_ADD_INPUT_VALUE = "Input value is required after /input command"
 TELLS_USER_TO_SET_LOCATION = "Set your location first to get started"
 
 TELLS_USER_TO_FINISH_SET_LOCATION = "Finish your location setup to get started"
+
+TELLS_USER_NO_NEED_FOR_RESET = "Location setup unfinished, cannot use /reset"
+
+TELLS_USER_RESET_SUCCESS = "Location successfully resetted!"
 
 
 def notify_city_or_regency_not_found(city_or_regency: str | None) -> str:
@@ -166,10 +174,9 @@ def no_forecast_result_error_message(
 datetime range: {start_dt} to {end_dt}"""
 
 
-def show_invalid_extra_help_value_message(
-    help_value: str
-) -> str:
+def show_invalid_extra_help_value_message(help_value: str) -> str:
     return f"<b>/help {help_value}</b> is not a known extra help"
+
 
 SHOW_LOCATION_COMMAND_HELP = """<b>/location</b>
 Continue location setup,
@@ -182,15 +189,23 @@ SHOW_INPUT_COMMAND_HELP = """<b>/input value</b>
 Send an input to the bot,
 as of now, this is only used in location setup
 to send the location name to the bot"""
-    
+
 
 SHOW_TODAY_COMMAND_HELP = """<b>/today</b>
 Get today weather forecast,
 user can only use this if they have finished
 the location setup"""
-    
-    
+
+
 SHOW_TOMORROW_COMMAND_HELP = """<b>/tomorrow</b>
 Get tomorrow weather forecast,
 user can only use this if they have finished
 the location setup"""
+
+
+SHOW_RESET_COMMAND_HELP = """<b>/reset</b>
+Reset current location,
+this can only be used once
+the location setup have finished.
+Use /revert if you need
+to reset unfinished location setup"""

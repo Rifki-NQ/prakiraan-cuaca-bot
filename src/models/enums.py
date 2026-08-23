@@ -6,6 +6,7 @@ class Commands(Enum):
     HELP = "/help"
     LOCATION = "/location"
     INPUT = "/input"
+    RESET = "/reset"
     TODAY = "/today"
     TOMORROW = "/tomorrow"
 
@@ -28,6 +29,8 @@ class BotAction(Enum):
     RECEIVE_INPUT_FOR_CITY_OR_REGENCY = auto()
     RECEIVE_INPUT_FOR_SUBDISTRICT = auto()
     RECEIVE_INPUT_FOR_VILLAGE = auto()
+    RESET_USER_LOCATION = auto()
+    TELLS_USER_NO_NEED_FOR_RESET = auto()
 
 
 class UserLocationState(Enum):
