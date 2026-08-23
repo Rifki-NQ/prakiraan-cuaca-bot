@@ -29,4 +29,4 @@ def get_user_data_or_raise(
 
 def merge_messages(*messages: str) -> str:
     """Merge the given strings tuple into a single string."""
-    return "\n".join(messages)
+    return "\n\n".join(messages)

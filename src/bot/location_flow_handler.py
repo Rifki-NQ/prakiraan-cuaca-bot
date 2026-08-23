@@ -154,6 +154,51 @@ class LocationFlowHandler:
             )
         )
 
+    async def revert_location_state(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> LocationFlowResult:
+        """
+        Revert the user_state by clearing the most specific (lowest-level) not-None attr,
+        clears desa_atau_kelurahan first if set, then kecamatan, then kabupaten_atau_kota.
+        """
+        user_state = self._get_user_state_or_raise(chat_id, user_state)
+        if user_state.desa_atau_kelurahan is not None:
+            user_state.desa_atau_kelurahan = None
+            return LocationFlowResult(
+                message=merge_messages(
+                    message_container.show_revert_message("village"),
+                    message_container.notify_to_choose_village(
+                        await self.get_merged_village_list(chat_id, user_state)
+                    ),
+                ),
+                bot_user_state=user_state,
+            )
+        elif user_state.kecamatan is not None:
+            user_state.kecamatan = None
+            return LocationFlowResult(
+                message=merge_messages(
+                    message_container.show_revert_message("subdistrict"),
+                    message_container.notify_to_choose_subdistrict(
+                        await self.get_merged_subdistrict_list(chat_id, user_state)
+                    ),
+                ),
+                bot_user_state=user_state,
+            )
+        elif user_state.kabupaten_atau_kota is not None:
+            user_state.kabupaten_atau_kota = None
+            return LocationFlowResult(
+                message=merge_messages(
+                    message_container.show_revert_message("city or regency"),
+                    message_container.ASK_CITY_OR_REGENCY,
+                ),
+                bot_user_state=user_state,
+            )
+        # this is reachable in a case where user has a state data in the db
+        # but the row values are all null or None (except the row timestamps)
+        return LocationFlowResult(
+            message=message_container.ASK_CITY_OR_REGENCY, bot_user_state=user_state
+        )
+
     async def get_full_address(
         self, chat_id: int, user_data: BotUserModel | None
     ) -> str:
@@ -206,13 +251,15 @@ class LocationFlowHandler:
     async def get_merged_subdistrict_list(
         self, chat_id: int, user_state: BotUserStateModel | None
     ) -> str:
+        """Return a merged list of subdistricts."""
         # reason why user_state instead of direct kabupaten_atau_kota:
         # because this method is also meant to be called outside of this class
-        user_state = self._get_user_state_or_raise(chat_id, user_state)
+        user_state = self._get_user_state_or_raise(
+            chat_id, user_state, UserStateCheckLevel.CITY_OR_REGENCY
+        )
         assert user_state.kabupaten_atau_kota is not None, (
             "_get_user_state_or_raise() guarantee this attribute is not None"
         )
-        """Return a merged list of subdistricts."""
         subdistricts = await self._get_subdistricts_or_raise(
             chat_id, user_state.kabupaten_atau_kota
         )
@@ -221,9 +268,9 @@ class LocationFlowHandler:
     async def get_merged_village_list(
         self, chat_id: int, user_state: BotUserStateModel | None
     ) -> str:
+        """Return a merged list of villages"""
         # same reason for not direct kabupaten_atau_kota and kecamatan params
         # with get_merged_subdistrict_list()
-        """Return a merged list of villages"""
         user_state = self._get_user_state_or_raise(
             chat_id, user_state, UserStateCheckLevel.SUBDISTRICT
         )

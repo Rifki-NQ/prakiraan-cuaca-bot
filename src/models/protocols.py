@@ -61,6 +61,9 @@ class LocationFlowHandlerProtocol(Protocol):
     async def handle_input_for_village(
         self, chat_id: int, user_state: BotUserStateModel | None, village: str | None
     ) -> LocationFlowResult | LocationFlowResultComplete: ...
+    async def revert_location_state(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> LocationFlowResult: ...
     async def get_full_address(
         self, chat_id: int, user_data: BotUserModel | None
     ) -> str: ...

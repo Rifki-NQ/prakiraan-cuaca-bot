@@ -33,7 +33,7 @@ Extra help commands:
 /help tomorrow
     <b>Show extra help for /tomorrow command</b>
 /help reset
-    <b>Show extra help for /reset command"""
+    <b>Show extra help for /reset command</b>"""
 
 
 SHOW_WELCOME_BACK_INTRO = """Welcome back to prakiraan-cuaca-bot project"""
@@ -53,9 +53,15 @@ TELLS_USER_TO_SET_LOCATION = "Set your location first to get started"
 
 TELLS_USER_TO_FINISH_SET_LOCATION = "Finish your location setup to get started"
 
-TELLS_USER_NO_NEED_FOR_RESET = "Location setup unfinished, cannot use /reset"
+TELLS_USER_NO_NEED_FOR_RESET = "Failed, no location state to reset"
 
 TELLS_USER_RESET_SUCCESS = "Location successfully resetted!"
+
+TELLS_USER_NO_NEED_FOR_REVERT = "Failed, no location state to revert"
+
+
+def show_revert_message(reverted_state: str) -> str:
+    return f"<b>{reverted_state}</b> reverted"
 
 
 def notify_city_or_regency_not_found(city_or_regency: str | None) -> str:
@@ -205,7 +211,17 @@ the location setup"""
 
 SHOW_RESET_COMMAND_HELP = """<b>/reset</b>
 Reset current location,
-this can only be used once
-the location setup have finished.
-Use /revert if you need
-to reset unfinished location setup"""
+this can only be used when you
+have initiated the location setup.
+Use /revert if you want
+to revert the location state
+by one level"""
+
+
+SHOW_REVERT_COMMAND_HELP = """<b>/revert</b>
+Revert current location state by one level,
+this can only be used when you
+have initiated the location setup.
+Use /reset if you want to revert
+all of the location state at once
+"""

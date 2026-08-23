@@ -157,15 +157,31 @@ INPUT_COMMAND_REGISTRY: list[ActionEntry] = [
 RESET_COMMAND_REGISTRY: list[ActionEntry] = [
     ActionEntry(
         command=Commands.RESET,
-        user_state=UserLocationState.COMPLETE,
+        user_state=UserLocationState.NO_STATE,
         need_input_value=False,
-        bot_action=(BotAction.RESET_USER_LOCATION,),
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_RESET,),
     ),
     ActionEntry(
         command=Commands.RESET,
         user_state=None,
         need_input_value=False,
-        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_RESET,),
+        bot_action=(BotAction.RESET_USER_LOCATION,),
+    ),
+]
+
+
+REVERT_COMMAND_REGISTRY: list[ActionEntry] = [
+    ActionEntry(
+        command=Commands.REVERT,
+        user_state=UserLocationState.NO_STATE,
+        need_input_value=False,
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_REVERT,),
+    ),
+    ActionEntry(
+        command=Commands.REVERT,
+        user_state=None,
+        need_input_value=False,
+        bot_action=(BotAction.REVERT_USER_LOCATION_STATE,),
     ),
 ]
 
@@ -244,6 +260,7 @@ COMMANDS_REGISTRY: list[ActionEntry] = [
     *LOCATION_COMMAND_REGISTRY,
     *INPUT_COMMAND_REGISTRY,
     *RESET_COMMAND_REGISTRY,
+    *REVERT_COMMAND_REGISTRY,
     *TODAY_COMMAND_REGISTRY,
     *TOMORROW_COMMAND_REGISTRY,
 ]

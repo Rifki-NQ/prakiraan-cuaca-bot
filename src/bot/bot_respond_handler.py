@@ -116,6 +116,12 @@ class BotRespondHandler:
                     messages.append(message_container.TELLS_USER_NO_NEED_FOR_RESET)
                 case BotAction.RESET_USER_LOCATION:
                     messages.append(await self._reset_location(chat_id))
+                case BotAction.TELLS_USER_NO_NEED_FOR_REVERT:
+                    messages.append(message_container.TELLS_USER_NO_NEED_FOR_REVERT)
+                case BotAction.REVERT_USER_LOCATION_STATE:
+                    messages.append(
+                        await self._revert_location_state(chat_id, bot_user_state)
+                    )
                 case _:
                     assert_never(action)
         return "\n\n".join(messages)
@@ -129,7 +135,7 @@ class BotRespondHandler:
                     chat_id, input_value
                 )
             )
-            await self._persist_location_result(chat_id, flow_result)
+            await self._persist_location_flow_result(chat_id, flow_result)
             return flow_result.message
         except DataIntegrityError as e:
             # reset the location state of this user
@@ -148,7 +154,7 @@ class BotRespondHandler:
     ) -> str:
         try:
             flow_result = await flow_handler(chat_id, user_state, input_value)
-            await self._persist_location_result(chat_id, flow_result)
+            await self._persist_location_flow_result(chat_id, flow_result)
             return flow_result.message
         except DataIntegrityError as e:
             # reset the location state of this user
@@ -204,6 +210,10 @@ class BotRespondHandler:
                 return message_container.SHOW_TODAY_COMMAND_HELP
             case "tomorrow":
                 return message_container.SHOW_TOMORROW_COMMAND_HELP
+            case "reset":
+                return message_container.SHOW_RESET_COMMAND_HELP
+            case "revert":
+                return message_container.SHOW_REVERT_COMMAND_HELP
             case _:
                 return message_container.show_invalid_extra_help_value_message(
                     help_value
@@ -213,7 +223,16 @@ class BotRespondHandler:
         await self._reset_user_state_data(chat_id)
         return message_container.TELLS_USER_RESET_SUCCESS
 
-    async def _persist_location_result(
+    async def _revert_location_state(
+        self, chat_id: int, user_state: BotUserStateModel | None
+    ) -> str:
+        flow_result = await self.location_flow_handler.revert_location_state(
+            chat_id, user_state
+        )
+        await self._persist_location_flow_result(chat_id, flow_result)
+        return flow_result.message
+
+    async def _persist_location_flow_result(
         self, chat_id: int, flow_result: LocationFlowResult | LocationFlowResultComplete
     ) -> None:
         if flow_result.bot_user_state is not None:
