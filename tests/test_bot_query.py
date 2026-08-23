@@ -94,8 +94,8 @@ def test_db_attributes_after_setup_bot_db(prod_bot_query: BotQuery) -> None:
     assert db.bot_offset_table.name == "bot_offset"
     assert db.bot_user_table.name == "bot_user"
     assert db.bot_user_state_table.name == "bot_user_state"
-    
-    
+
+
 @pytest.mark.prod_db
 async def test_setup_bot_db_create_tables_in_db(prod_bot_query: BotQuery) -> None:
     db = prod_bot_query._get_db()  # pyright: ignore[reportPrivateUsage]
@@ -103,7 +103,7 @@ async def test_setup_bot_db_create_tables_in_db(prod_bot_query: BotQuery) -> Non
     assert db.bot_offset_table.name in table_names_from_db
     assert db.bot_user_table.name in table_names_from_db
     assert db.bot_user_state_table.name in table_names_from_db
-    
+
 
 async def test_get_bot_offset_return_expected(bot_query: BotQuery) -> None:
     result = await bot_query.get_bot_offset(MOCK_BOT_OFFSET_DATA["bot_token"])

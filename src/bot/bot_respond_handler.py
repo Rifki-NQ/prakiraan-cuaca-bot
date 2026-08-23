@@ -46,6 +46,10 @@ class BotRespondHandler:
             match action:
                 case BotAction.SHOW_INTRO:
                     messages.append(message_container.SHOW_INTRO)
+                case BotAction.SHOW_HELP:
+                    messages.append(message_container.SHOW_HELP)
+                case BotAction.SHOW_EXTRA_HELP:
+                    messages.append(self._route_extra_help(input_value))
                 case BotAction.ASK_CITY_OR_REGENCY:
                     messages.append(message_container.ASK_CITY_OR_REGENCY)
                 case BotAction.ASK_SUBDISTRICT:
@@ -183,6 +187,21 @@ class BotRespondHandler:
             )
         else:
             assert_never(forecast_time)
+            
+    def _route_extra_help(self, help_value: str | None) -> str:
+        assert help_value is not None, "bot_router guarantee this won't be None"
+        match help_value:
+            # add more extra help
+            case "location":
+                return message_container.SHOW_LOCATION_COMMAND_HELP
+            case "input":
+                return message_container.SHOW_INPUT_COMMAND_HELP
+            case "today":
+                return message_container.SHOW_TODAY_COMMAND_HELP
+            case "tomorrow":
+                return message_container.SHOW_TOMORROW_COMMAND_HELP
+            case _:
+                return message_container.show_invalid_extra_help_value_message(help_value)
 
     async def _persist_location_result(
         self, chat_id: int, flow_result: LocationFlowResult | LocationFlowResultComplete

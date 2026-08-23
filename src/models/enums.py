@@ -3,6 +3,7 @@ from enum import Enum, IntEnum, auto
 
 class Commands(Enum):
     START = "/start"
+    HELP = "/help"
     LOCATION = "/location"
     INPUT = "/input"
     TODAY = "/today"
@@ -11,6 +12,8 @@ class Commands(Enum):
 
 class BotAction(Enum):
     SHOW_INTRO = auto()
+    SHOW_HELP = auto()
+    SHOW_EXTRA_HELP = auto()
     ASK_CITY_OR_REGENCY = auto()
     ASK_SUBDISTRICT = auto()
     ASK_VILLAGE = auto()
@@ -21,6 +24,7 @@ class BotAction(Enum):
     TELLS_USER_TO_SET_LOCATION = auto()
     TELLS_USER_NO_NEED_FOR_INPUT = auto()
     TELLS_USER_TO_FINISH_SET_LOCATION = auto()
+    TELLS_USER_TO_ADD_INPUT_VALUE = auto()
     RECEIVE_INPUT_FOR_CITY_OR_REGENCY = auto()
     RECEIVE_INPUT_FOR_SUBDISTRICT = auto()
     RECEIVE_INPUT_FOR_VILLAGE = auto()
