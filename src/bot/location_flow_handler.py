@@ -273,18 +273,19 @@ class LocationFlowHandler:
         self,
         chat_id: int,
         user_state: BotUserStateModel | None,
-        attr_check_level: UserStateCheckLevel = UserStateCheckLevel.CITY_OR_REGENCY,
+        attr_check_level: UserStateCheckLevel | None = None,
     ) -> BotUserStateModel:
         """
         get the state of a user,
         raise DataIntegrityError immediately if the user_state is None
-        or user_state.kabupaten_atau_kota is None
         """
         if user_state is None:
             logger.error(
                 f"Unexpected: missing bot_user_state data for chat_id: {chat_id}"
             )
             raise_data_integrity_error(chat_id, "city_or_regency")
+        if attr_check_level is None:
+            return user_state
         if (
             user_state.kabupaten_atau_kota is None
             and attr_check_level >= UserStateCheckLevel.CITY_OR_REGENCY
