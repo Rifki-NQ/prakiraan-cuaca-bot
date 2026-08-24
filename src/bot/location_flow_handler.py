@@ -15,7 +15,6 @@ from src.bot.bot_utils import (
 )
 from src.exceptions import (
     EmptyQueryResultError,
-    EmptyInputValueError,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,9 +27,8 @@ class LocationFlowHandler:
         self.location_finder = location_finder
 
     async def handle_input_for_city_or_regency(
-        self, chat_id: int, city_or_regency: str | None
+        self, chat_id: int, city_or_regency: str
     ) -> LocationFlowResult:
-        city_or_regency = self._get_value_or_raise(chat_id, city_or_regency)
         try:
             result = await self.location_finder.search_city_or_regency(city_or_regency)
         except EmptyQueryResultError as e:
@@ -64,9 +62,8 @@ class LocationFlowHandler:
         self,
         chat_id: int,
         user_state: BotUserStateModel | None,
-        subdistrict: str | None,
+        subdistrict: str,
     ) -> LocationFlowResult:
-        subdistrict = self._get_value_or_raise(chat_id, subdistrict)
         user_state = self._get_user_state_or_raise(
             chat_id, user_state, UserStateCheckLevel.CITY_OR_REGENCY
         )
@@ -104,9 +101,8 @@ class LocationFlowHandler:
         )
 
     async def handle_input_for_village(
-        self, chat_id: int, user_state: BotUserStateModel | None, village: str | None
+        self, chat_id: int, user_state: BotUserStateModel | None, village: str
     ) -> LocationFlowResult | LocationFlowResultComplete:
-        village = self._get_value_or_raise(chat_id, village)
         user_state = self._get_user_state_or_raise(
             chat_id, user_state, UserStateCheckLevel.SUBDISTRICT
         )
@@ -370,10 +366,3 @@ class LocationFlowHandler:
         - tiga
         """
         return "\n".join(["- " + ls for ls in list_value])
-
-    def _get_value_or_raise(self, chat_id: int, input_value: str | None) -> str:
-        if input_value is None:
-            raise EmptyInputValueError(
-                chat_id, "Error: input value is required after /input command"
-            )
-        return input_value

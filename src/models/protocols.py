@@ -50,16 +50,16 @@ class LocationFinderProtocol(Protocol):
 
 class LocationFlowHandlerProtocol(Protocol):
     async def handle_input_for_city_or_regency(
-        self, chat_id: int, city_or_regency: str | None
+        self, chat_id: int, city_or_regency: str
     ) -> LocationFlowResult: ...
     async def handle_input_for_subdistrict(
         self,
         chat_id: int,
         user_state: BotUserStateModel | None,
-        subdistrict: str | None,
+        subdistrict: str,
     ) -> LocationFlowResult: ...
     async def handle_input_for_village(
-        self, chat_id: int, user_state: BotUserStateModel | None, village: str | None
+        self, chat_id: int, user_state: BotUserStateModel | None, village: str
     ) -> LocationFlowResult | LocationFlowResultComplete: ...
     async def revert_location_state(
         self, chat_id: int, user_state: BotUserStateModel | None

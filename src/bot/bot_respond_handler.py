@@ -129,6 +129,9 @@ class BotRespondHandler:
     async def _handle_input_for_city_or_regency(
         self, chat_id: int, input_value: str | None
     ) -> str:
+        assert input_value is not None, (
+            "src/bot/bot_router guarantee this won't be None"
+        )
         try:
             flow_result = (
                 await self.location_flow_handler.handle_input_for_city_or_regency(
@@ -148,10 +151,13 @@ class BotRespondHandler:
         user_state: BotUserStateModel | None,
         input_value: str | None,
         flow_handler: Callable[
-            [int, BotUserStateModel | None, str | None],
+            [int, BotUserStateModel | None, str],
             Awaitable[LocationFlowResult | LocationFlowResultComplete],
         ],
     ) -> str:
+        assert input_value is not None, (
+            "src/bot/bot_router guarantee this won't be None"
+        )
         try:
             flow_result = await flow_handler(chat_id, user_state, input_value)
             await self._persist_location_flow_result(chat_id, flow_result)
@@ -199,9 +205,8 @@ class BotRespondHandler:
             assert_never(forecast_time)
 
     def _route_extra_help(self, help_value: str | None) -> str:
-        assert help_value is not None, "bot_router guarantee this won't be None"
+        assert help_value is not None, "src/bot/bot_router guarantee this won't be None"
         match help_value:
-            # add more extra help
             case "location":
                 return message_container.SHOW_LOCATION_COMMAND_HELP
             case "input":

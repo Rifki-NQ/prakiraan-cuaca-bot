@@ -112,18 +112,6 @@ class InvalidUserStateError(BotHandlerError):
         super().__init__(chat_id, message)
 
 
-class EmptyInputValueError(BotHandlerError):
-    """
-    Raised when user type /input command without giving any value after that
-
-    valid example: /input value_a
-
-    invalid example: /input
-    """
-
-    pass
-
-
 class DataIntegrityError(BotHandlerError):
     """Raised when the data from the database does not exist or valid,
     when it's expected to exist or valid"""
