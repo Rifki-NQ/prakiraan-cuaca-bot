@@ -4,7 +4,8 @@ SHOW_INTRO = """Welcome to prakiraan-cuaca-bot project.
 this is an experimental project made by https://github.com/Rifki-NQ.
 specifically created for learning purpose,
 as the consumer layer of
-https://github.com/Rifki-NQ/indo-weather-etl"""
+https://github.com/Rifki-NQ/indo-weather-etl
+type /help to get help menu"""
 
 
 SHOW_HELP = """Available Commands:
@@ -45,9 +46,7 @@ with /input <b>your city or regency</b>.
 <i>example: /input kabupaten bekasi</i>"""
 
 
-TELLS_USER_NO_NEED_FOR_INPUT = "Location setup finished, no need for /input"
-
-TELLS_USER_TO_ADD_INPUT_VALUE = "Input value is required after /input command"
+TELLS_USER_LOCATION_SETUP_FINISHED = "Location setup finished, no need for /input"
 
 TELLS_USER_TO_SET_LOCATION = "Set your location first to get started"
 
@@ -55,9 +54,17 @@ TELLS_USER_TO_FINISH_SET_LOCATION = "Finish your location setup to get started"
 
 TELLS_USER_NO_NEED_FOR_RESET = "Failed, no location state to reset"
 
-TELLS_USER_RESET_SUCCESS = "Location successfully resetted!"
+TELLS_USER_RESET_SUCCESS = "Your location has been reset"
 
 TELLS_USER_NO_NEED_FOR_REVERT = "Failed, no location state to revert"
+
+
+def notify_to_add_input_value(command: str) -> str:
+    return f"Input value is required for {command} command"
+
+
+def notify_to_not_add_input_value(command: str) -> str:
+    return f"{command} command does not take input value"
 
 
 def show_revert_message(reverted_state: str) -> str:

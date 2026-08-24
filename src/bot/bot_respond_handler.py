@@ -92,10 +92,14 @@ class BotRespondHandler:
                             self.location_flow_handler.handle_input_for_village,
                         )
                     )
-                case BotAction.TELLS_USER_NO_NEED_FOR_INPUT:
-                    messages.append(message_container.TELLS_USER_NO_NEED_FOR_INPUT)
+                case BotAction.TELLS_USER_LOCATION_SETUP_FINISHED:
+                    messages.append(
+                        message_container.TELLS_USER_LOCATION_SETUP_FINISHED
+                    )
                 case BotAction.TELLS_USER_TO_ADD_INPUT_VALUE:
-                    messages.append(message_container.TELLS_USER_TO_ADD_INPUT_VALUE)
+                    messages.append(
+                        message_container.notify_to_add_input_value(command.value)
+                    )
                 case BotAction.TELLS_USER_TO_SET_LOCATION:
                     messages.append(message_container.TELLS_USER_TO_SET_LOCATION)
                 case BotAction.TELLS_USER_TO_FINISH_SET_LOCATION:
@@ -121,6 +125,10 @@ class BotRespondHandler:
                 case BotAction.REVERT_USER_LOCATION_STATE:
                     messages.append(
                         await self._revert_location_state(chat_id, bot_user_state)
+                    )
+                case BotAction.TELLS_USER_NO_NEED_FOR_INPUT_VALUE:
+                    messages.append(
+                        message_container.notify_to_not_add_input_value(command.value)
                     )
                 case _:
                     assert_never(action)

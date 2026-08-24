@@ -24,7 +24,7 @@ class BotAction(Enum):
     SHOW_TODAY_FORECASTS = auto()
     SHOW_TOMORROW_FORECASTS = auto()
     TELLS_USER_TO_SET_LOCATION = auto()
-    TELLS_USER_NO_NEED_FOR_INPUT = auto()
+    TELLS_USER_LOCATION_SETUP_FINISHED = auto()
     TELLS_USER_TO_FINISH_SET_LOCATION = auto()
     TELLS_USER_TO_ADD_INPUT_VALUE = auto()
     RECEIVE_INPUT_FOR_CITY_OR_REGENCY = auto()
@@ -34,6 +34,7 @@ class BotAction(Enum):
     TELLS_USER_NO_NEED_FOR_RESET = auto()
     REVERT_USER_LOCATION_STATE = auto()
     TELLS_USER_NO_NEED_FOR_REVERT = auto()
+    TELLS_USER_NO_NEED_FOR_INPUT_VALUE = auto()
 
 
 class UserLocationState(Enum):

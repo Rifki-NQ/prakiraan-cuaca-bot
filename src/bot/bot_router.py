@@ -12,7 +12,6 @@ START_COMMAND_REGISTRY: list[ActionEntry] = [
         need_input_value=False,
         bot_action=(
             BotAction.SHOW_INTRO,
-            BotAction.TELLS_USER_TO_SET_LOCATION,
             BotAction.ASK_CITY_OR_REGENCY,
         ),
     ),
@@ -51,6 +50,13 @@ START_COMMAND_REGISTRY: list[ActionEntry] = [
             BotAction.SHOW_WELCOME_BACK_INTRO,
             BotAction.SHOW_USER_CURRENT_LOCATION,
         ),
+    ),
+    # in case user send /start with value
+    ActionEntry(
+        command=Commands.START,
+        user_state=None,
+        need_input_value=True,
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT_VALUE,),
     ),
 ]
 
@@ -110,6 +116,13 @@ LOCATION_COMMAND_REGISTRY: list[ActionEntry] = [
         need_input_value=False,
         bot_action=(BotAction.SHOW_USER_CURRENT_LOCATION,),
     ),
+    # in case user send /location with value
+    ActionEntry(
+        command=Commands.LOCATION,
+        user_state=None,
+        need_input_value=True,
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT_VALUE,),
+    ),
 ]
 
 
@@ -142,9 +155,9 @@ INPUT_COMMAND_REGISTRY: list[ActionEntry] = [
         command=Commands.INPUT,
         user_state=UserLocationState.COMPLETE,
         need_input_value=True,
-        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT,),
+        bot_action=(BotAction.TELLS_USER_LOCATION_SETUP_FINISHED,),
     ),
-    # what to show to user when they send /input without value
+    # in case user send /input without any value
     ActionEntry(
         command=Commands.INPUT,
         user_state=None,
@@ -167,6 +180,13 @@ RESET_COMMAND_REGISTRY: list[ActionEntry] = [
         need_input_value=False,
         bot_action=(BotAction.RESET_USER_LOCATION,),
     ),
+    # in case user send /reset with value
+    ActionEntry(
+        command=Commands.RESET,
+        user_state=None,
+        need_input_value=True,
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT_VALUE,),
+    ),
 ]
 
 
@@ -182,6 +202,13 @@ REVERT_COMMAND_REGISTRY: list[ActionEntry] = [
         user_state=None,
         need_input_value=False,
         bot_action=(BotAction.REVERT_USER_LOCATION_STATE,),
+    ),
+    # in case user send /revert with value
+    ActionEntry(
+        command=Commands.REVERT,
+        user_state=None,
+        need_input_value=True,
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT_VALUE,),
     ),
 ]
 
@@ -217,6 +244,13 @@ TODAY_COMMAND_REGISTRY: list[ActionEntry] = [
         need_input_value=False,
         bot_action=(BotAction.SHOW_TODAY_FORECASTS,),
     ),
+    # in case user send /today with value
+    ActionEntry(
+        command=Commands.TODAY,
+        user_state=None,
+        need_input_value=True,
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT_VALUE,),
+    ),
 ]
 
 
@@ -250,6 +284,13 @@ TOMORROW_COMMAND_REGISTRY: list[ActionEntry] = [
         user_state=UserLocationState.COMPLETE,
         need_input_value=False,
         bot_action=(BotAction.SHOW_TOMORROW_FORECASTS,),
+    ),
+    # in case user send /tomorrow with value
+    ActionEntry(
+        command=Commands.TOMORROW,
+        user_state=None,
+        need_input_value=True,
+        bot_action=(BotAction.TELLS_USER_NO_NEED_FOR_INPUT_VALUE,),
     ),
 ]
 
