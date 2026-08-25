@@ -3,8 +3,6 @@ from src.models.enums import Commands, BotAction, UserLocationState
 from src.exceptions import ActionRegistryLookupError
 
 
-# TODO: add /reset command
-
 START_COMMAND_REGISTRY: list[ActionEntry] = [
     ActionEntry(
         command=Commands.START,
