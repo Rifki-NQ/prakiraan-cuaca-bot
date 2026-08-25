@@ -1,3 +1,5 @@
+from src.models.domain_model import BotUserStateModel
+
 """This module contains all user facing messages"""
 
 SHOW_INTRO = """Welcome to prakiraan-cuaca-bot project.
@@ -129,28 +131,22 @@ with /input <b>your village</b>
 """
 
 
-def notify_location_updated(
-    city_or_regency: str, subdistrict: str, village: str, adm4_code: str
-) -> str:
-    return f"""
-Your location address updated!
-city or regency: <b>{city_or_regency}</b>
-subdistrict: <b>{subdistrict}</b>
-village: <b>{village}</b>
-adm4_code of the address: <b>{adm4_code}</b>
-"""
+def notify_location_updated(user_state: BotUserStateModel, adm4_code: str) -> str:
+    return f"""Your location address updated!
+city or regency: <b>{user_state.kabupaten_atau_kota}</b>
+subdistrict: <b>{user_state.kecamatan}</b>
+village: <b>{user_state.desa_atau_kelurahan}</b>
+adm4_code of the address: <b>{adm4_code}</b>"""
 
 
 def show_user_full_address(
     city_or_regency: str, subdistrict: str, village: str, adm4_code: str
 ) -> str:
-    return f"""
--- Your location address --
+    return f"""-- Your location address --
 city or regency: <b>{city_or_regency}</b>
 subdistrict: <b>{subdistrict}</b>
 village: <b>{village}</b>
-adm4_code of the address: <b>{adm4_code}</b>
-"""
+adm4_code of the address: <b>{adm4_code}</b>"""
 
 
 def forecasts_message_header(adm4_code: str, date: str) -> str:

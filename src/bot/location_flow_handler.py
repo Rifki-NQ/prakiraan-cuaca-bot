@@ -37,25 +37,20 @@ class LocationFlowHandler:
                     e.query.get("city_or_regency")
                 )
             )
-        if len(result) == 1:
-            return LocationFlowResult(
-                message=merge_messages(
-                    message_container.notify_city_or_regency_updated(result[0]),
-                    # immediately proceed to show list of the subdistricts
-                    message_container.notify_to_choose_subdistrict(
-                        await self.get_merged_subdistrict_list(
-                            chat_id, BotUserStateModel(chat_id, result[0])
-                        )
-                    ),
-                ),
-                bot_user_state=BotUserStateModel(
-                    chat_id=chat_id, kabupaten_atau_kota=result[0]
+        if city_or_regency in result:
+            user_state = BotUserStateModel(chat_id, city_or_regency)
+            return self._build_flow_result(
+                user_state,
+                message_container.notify_city_or_regency_updated(city_or_regency),
+                message_container.notify_to_choose_subdistrict(
+                    await self.get_merged_subdistrict_list(chat_id, user_state)
                 ),
             )
-        return LocationFlowResult(
-            message=message_container.notify_to_choose_city_or_regency(
+        return self._build_flow_result(
+            None,
+            message_container.notify_to_choose_city_or_regency(
                 self._merge_list(result)
-            )
+            ),
         )
 
     async def handle_input_for_subdistrict(
@@ -73,31 +68,22 @@ class LocationFlowHandler:
         subdistricts = await self._get_subdistricts_or_raise(
             chat_id, user_state.kabupaten_atau_kota
         )
-        # check whether user inputted value exists in the query result
         if subdistrict in subdistricts:
-            return LocationFlowResult(
-                message=merge_messages(
-                    message_container.notify_subdistrict_updated(subdistrict),
-                    # immediately proceed to show list of the villages
-                    message_container.notify_to_choose_village(
-                        await self.get_merged_village_list(
-                            chat_id,
-                            BotUserStateModel(
-                                chat_id, user_state.kabupaten_atau_kota, subdistrict
-                            ),
-                        )
-                    ),
-                ),
-                bot_user_state=BotUserStateModel(
-                    chat_id=chat_id,
-                    kabupaten_atau_kota=user_state.kabupaten_atau_kota,
-                    kecamatan=subdistrict,
+            new_user_state = BotUserStateModel(
+                chat_id, user_state.kabupaten_atau_kota, subdistrict
+            )
+            return self._build_flow_result(
+                new_user_state,
+                message_container.notify_subdistrict_updated(subdistrict),
+                message_container.notify_to_choose_village(
+                    await self.get_merged_village_list(chat_id, new_user_state)
                 ),
             )
-        return LocationFlowResult(
-            message=message_container.notify_subdistrict_not_found(
+        return self._build_flow_result(
+            None,
+            message_container.notify_subdistrict_not_found(
                 subdistrict, self._merge_list(subdistricts)
-            )
+            ),
         )
 
     async def handle_input_for_village(
@@ -116,38 +102,27 @@ class LocationFlowHandler:
             chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan
         )
         if village in villages:
-            # immediately get adm4_code based on the full address
-            adm4_code = await self.get_adm4_code_or_raise(
-                chat_id,
-                BotUserStateModel(
-                    chat_id,
-                    user_state.kabupaten_atau_kota,
-                    user_state.kecamatan,
-                    village,
-                ),
+            new_user_state = BotUserStateModel(
+                chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan, village
             )
+            # immediately get the adm4_code based on the full address
+            adm4_code = await self.get_adm4_code_or_raise(chat_id, new_user_state)
             return LocationFlowResultComplete(
                 message=merge_messages(
                     message_container.notify_village_updated(village),
                     message_container.notify_location_updated(
-                        user_state.kabupaten_atau_kota,
-                        user_state.kecamatan,
-                        village,
+                        new_user_state,
                         adm4_code,
                     ),
                 ),
-                bot_user_state=BotUserStateModel(
-                    chat_id=chat_id,
-                    kabupaten_atau_kota=user_state.kabupaten_atau_kota,
-                    kecamatan=user_state.kecamatan,
-                    desa_atau_kelurahan=village,
-                ),
+                bot_user_state=new_user_state,
                 adm4_code=adm4_code,
             )
-        return LocationFlowResult(
-            message=message_container.notify_village_not_found(
+        return self._build_flow_result(
+            None,
+            message_container.notify_village_not_found(
                 village, self._merge_list(villages)
-            )
+            ),
         )
 
     async def revert_location_state(
@@ -160,39 +135,33 @@ class LocationFlowHandler:
         user_state = self._get_user_state_or_raise(chat_id, user_state)
         if user_state.desa_atau_kelurahan is not None:
             user_state.desa_atau_kelurahan = None
-            return LocationFlowResult(
-                message=merge_messages(
-                    message_container.show_revert_message("village"),
-                    message_container.notify_to_choose_village(
-                        await self.get_merged_village_list(chat_id, user_state)
-                    ),
+            return self._build_flow_result(
+                user_state,
+                message_container.show_revert_message("village"),
+                message_container.notify_to_choose_village(
+                    await self.get_merged_village_list(chat_id, user_state)
                 ),
-                bot_user_state=user_state,
             )
         elif user_state.kecamatan is not None:
             user_state.kecamatan = None
-            return LocationFlowResult(
-                message=merge_messages(
-                    message_container.show_revert_message("subdistrict"),
-                    message_container.notify_to_choose_subdistrict(
-                        await self.get_merged_subdistrict_list(chat_id, user_state)
-                    ),
+            return self._build_flow_result(
+                user_state,
+                message_container.show_revert_message("subdistrict"),
+                message_container.notify_to_choose_subdistrict(
+                    await self.get_merged_subdistrict_list(chat_id, user_state)
                 ),
-                bot_user_state=user_state,
             )
         elif user_state.kabupaten_atau_kota is not None:
             user_state.kabupaten_atau_kota = None
-            return LocationFlowResult(
-                message=merge_messages(
-                    message_container.show_revert_message("city or regency"),
-                    message_container.ASK_CITY_OR_REGENCY,
-                ),
-                bot_user_state=user_state,
+            return self._build_flow_result(
+                user_state,
+                message_container.show_revert_message("city or regency"),
+                message_container.ASK_CITY_OR_REGENCY,
             )
         # this is reachable in a case where user has a state data in the db
         # but the row values are all null or None (except the row timestamps)
-        return LocationFlowResult(
-            message=message_container.ASK_CITY_OR_REGENCY, bot_user_state=user_state
+        return self._build_flow_result(
+            user_state, message_container.ASK_CITY_OR_REGENCY
         )
 
     async def get_full_address(
@@ -354,6 +323,13 @@ class LocationFlowHandler:
             )
             raise_data_integrity_error(chat_id, "village")
         return user_state
+
+    def _build_flow_result(
+        self, user_state: BotUserStateModel | None, *messages: str
+    ) -> LocationFlowResult:
+        return LocationFlowResult(
+            message=merge_messages(*messages), bot_user_state=user_state
+        )
 
     def _merge_list(self, list_value: list[str]) -> str:
         """
