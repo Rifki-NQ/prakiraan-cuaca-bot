@@ -2,8 +2,12 @@ import logging
 import asyncio
 from collections.abc import AsyncIterable
 from datetime import datetime, timedelta
-from src.models.dt_model import DatetimeModel
-from src.models.domain_model import ForecastModel, BotUserModel, BotUserStateModel
+from src.models.domain_model import (
+    ForecastModel,
+    BotUserModel,
+    BotUserStateModel,
+    DatetimeModel,
+)
 from src.models.enums import UserLocationState
 from src.models.contexts import BotUserStateContext
 from src.models.protocols import (

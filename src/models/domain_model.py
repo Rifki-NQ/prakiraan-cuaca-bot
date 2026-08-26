@@ -1,5 +1,5 @@
 from src.models.enums import Commands, BotAction, UserLocationState
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime
 
 
@@ -21,6 +21,30 @@ class ForecastModel:
     visibility: int  # meters unit
     updated_at: datetime  # datetime for the forecast last update
     created_at: datetime  # datetime for the forecast creation
+
+
+@dataclass
+class DatetimeModel:
+    """
+    Automatically fills non init attribute from current_datetime
+
+    non init fields:
+        current_datetime_start: datetime = replace current_datetime time to 00:00:00
+        current_datetime_end: datetime = replace current_datetime time to 23:59:59
+    """
+
+    current_datetime: datetime
+    current_datetime_start: datetime = field(init=False)
+    current_datetime_end: datetime = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.current_datetime = self.current_datetime.replace(tzinfo=None)
+        self.current_datetime_start = self.current_datetime.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        self.current_datetime_end = self.current_datetime.replace(
+            hour=23, minute=59, second=59, microsecond=0
+        )
 
 
 @dataclass
