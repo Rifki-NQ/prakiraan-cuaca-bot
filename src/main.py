@@ -10,6 +10,7 @@ from src.queries.etl_query import ETLQuery
 from src.queries.bot_query import BotQuery
 from src.queries.sqlite_query import LocationFinder
 from src.service import BotService
+from src.bot.bot_rate_limiter import BotRateLimiter
 from src.bot.bot_state_handler import BotStateHandler
 from src.bot.location_flow_handler import LocationFlowHandler
 from src.bot.bot_respond_handler import BotRespondHandler
@@ -82,10 +83,11 @@ async def run_app(
             Path("adm4_codes/jawa_barat.csv")
         )
     bot_service = BotService(etl_query, bot_query)
+    bot_rate_limiter = BotRateLimiter(limit=29, limit_reset_interval=1)
     bot_state_handler = BotStateHandler(bot_query)
     location_flow_handler = LocationFlowHandler(location_finder)
     bot_respond_handler = BotRespondHandler(bot_service, location_flow_handler)
-    bot_handler = BotHandler(bot_respond_handler, bot_state_handler)
+    bot_handler = BotHandler(bot_respond_handler, bot_state_handler, bot_rate_limiter)
     await bot_handler.run_bot(bot_token)
 
 

@@ -6,7 +6,11 @@ from telegram.request import HTTPXRequest
 from telegram.error import TimedOut, RetryAfter, BadRequest, NetworkError
 from src.models.enums import Commands
 from src.models.contexts import BotUpdateContext
-from src.models.protocols import BotRespondHandlerProtocol, BotStateHandlerProtocol
+from src.models.protocols import (
+    BotRespondHandlerProtocol,
+    BotStateHandlerProtocol,
+    BotRateLimiterProtocol,
+)
 from src.exceptions import (
     BotHandlerError,
     EmptyCommandError,
@@ -23,7 +27,7 @@ class BotHandler:
     MAX_CONCURRENT_TASKS = 15
     CONNECTION_POOL_SIZE = MAX_CONCURRENT_TASKS + 2
     UPDATE_TIMEOUT = 30  # bot long polling value
-    SEND_MESSAGE_TIMEOUT = 5  # 5 seconds before retry mechanism trigger
+    SEND_MESSAGE_TIMEOUT = 2  # 2 seconds before retry mechanism trigger
     SEND_MESSAGE_RETRY_ATTEMPT = 3  # max retry attempt
     SEND_MESSAGE_RETRY_DELAY = 0.5  # delay per retry attempt
 
@@ -31,14 +35,22 @@ class BotHandler:
         self,
         respond_handler: BotRespondHandlerProtocol,
         bot_state: BotStateHandlerProtocol,
+        bot_rate_limiter: BotRateLimiterProtocol,
     ) -> None:
         self.respond_handler = respond_handler
         self.bot_state = bot_state
-        self.active_tasks: set[asyncio.Task[None]] = set()
-        self.semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
+        self.bot_rate_limiter = bot_rate_limiter
+        # self._background_tasks holds a reference for tasks that
+        # run for indefinitely in the background
+        self._background_tasks: set[asyncio.Task[None]] = set()
+        # self._active_tasks holds a reference for tasks
+        # that run then finish
+        self._active_tasks: set[asyncio.Task[None]] = set()
+        self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
 
     async def run_bot(self, bot_token: str) -> None:
         """Run the bot, retry the long polling if timed out."""
+        self._create_rate_limiter_timer_task()
         while True:
             try:
                 logger.info("Bot long polling started")
@@ -81,7 +93,7 @@ class BotHandler:
         """Create the task for _respond_to_update()"""
         task = asyncio.create_task(self._respond_to_update(bot, update))
         task.set_name(f"Task-{update.update_id}")
-        self.active_tasks.add(task)
+        self._active_tasks.add(task)
         chat_id = update.effective_chat.id if update.effective_chat else None
         task.add_done_callback(self._handle_task_completion(bot, chat_id))
 
@@ -90,7 +102,7 @@ class BotHandler:
         Parse the update object then pass it into BotRespondHandler,
         after that, send the respond message with retry mechanism.
         """
-        await self.semaphore.acquire()  # concurrency limiter
+        await self._semaphore.acquire()  # limit the concurrency
         update_context = self._parse_update(update)
         if update_context is None:
             logger.info("Skip responding to non Message context")
@@ -115,14 +127,14 @@ class BotHandler:
         """Create the task for _send_error_message()."""
         task = asyncio.create_task(self._send_error_message(bot, chat_id, err_message))
         task.set_name(f"Error-Message-{chat_id}")
-        self.active_tasks.add(task)
+        self._active_tasks.add(task)
         task.add_done_callback(self._handle_task_completion(bot, chat_id))
 
     async def _send_error_message(
         self, bot: Bot, chat_id: int, err_message: str
     ) -> None:
         """Send an error message to user."""
-        await self.semaphore.acquire()  # concurrency limiter
+        await self._semaphore.acquire()  # limit the concurrency
         await self._send_messsage_with_retry(bot, chat_id, err_message)
 
     async def _send_messsage_with_retry(
@@ -134,6 +146,7 @@ class BotHandler:
         """
         for attempt in range(self.SEND_MESSAGE_RETRY_ATTEMPT):
             try:
+                await self.bot_rate_limiter.add()  # rate limited prevention
                 await bot.send_message(
                     chat_id,
                     message,
@@ -187,8 +200,8 @@ class BotHandler:
                 logger.debug(f"Task: {task.get_name()} finished successfully")
                 return
             finally:
-                self.semaphore.release()  # release one slot of concurrency
-                self.active_tasks.discard(task)
+                self._semaphore.release()  # release one slot of concurrency
+                self._active_tasks.discard(task)
             logger.debug(f"Task: {task.get_name()} finished with error")
 
         return _cb
@@ -204,6 +217,12 @@ class BotHandler:
             current_offset = updates[-1].update_id + 1
             await self.bot_state.store_offset(bot_token, current_offset)
             return current_offset
+
+    def _create_rate_limiter_timer_task(self) -> None:
+        """Create the task for self.bot_rate_limiter.start_reset_timer()."""
+        task = asyncio.create_task(self.bot_rate_limiter.start_reset_timer())
+        task.set_name("Bot-Rate-Limiter-reset-timer")
+        self._background_tasks.add(task)
 
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
         """Parse the update object then convert it into BotUpdateContext."""

@@ -101,6 +101,11 @@ class BotStateHandlerProtocol(Protocol):
     async def store_offset(self, bot_token: str, offset: int) -> None: ...
 
 
+class BotRateLimiterProtocol(Protocol):
+    async def add(self) -> None: ...
+    async def start_reset_timer(self) -> None: ...
+
+
 class BotRespondHandlerProtocol(Protocol):
     async def parse_command(
         self, chat_id: int, command: Commands, input_value: str | None = None
