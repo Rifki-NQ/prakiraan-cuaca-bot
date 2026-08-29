@@ -10,6 +10,7 @@ from src.models.protocols import (
     BotRespondHandlerProtocol,
     BotStateHandlerProtocol,
     BotRateLimiterProtocol,
+    UserRateLimiterProtocol,
 )
 from src.exceptions import (
     BotHandlerError,
@@ -36,10 +37,12 @@ class BotHandler:
         respond_handler: BotRespondHandlerProtocol,
         bot_state: BotStateHandlerProtocol,
         bot_rate_limiter: BotRateLimiterProtocol,
+        user_rate_limiter: UserRateLimiterProtocol,
     ) -> None:
         self.respond_handler = respond_handler
         self.bot_state = bot_state
         self.bot_rate_limiter = bot_rate_limiter
+        self.user_rate_limiter = user_rate_limiter
         # self._background_tasks holds a reference for tasks that
         # run for indefinitely in the background
         self._background_tasks: set[asyncio.Task[None]] = set()
@@ -146,7 +149,10 @@ class BotHandler:
         """
         for attempt in range(self.SEND_MESSAGE_RETRY_ATTEMPT):
             try:
-                await self.bot_rate_limiter.add()  # rate limited prevention
+                await self.bot_rate_limiter.add()  # telagram rate limited prevention
+                await self.user_rate_limiter.acquire(
+                    chat_id
+                )  # bot user spam prevention
                 await bot.send_message(
                     chat_id,
                     message,

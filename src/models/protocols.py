@@ -106,6 +106,10 @@ class BotRateLimiterProtocol(Protocol):
     async def start_reset_timer(self) -> None: ...
 
 
+class UserRateLimiterProtocol(Protocol):
+    async def acquire(self, chat_id: int) -> None: ...
+
+
 class BotRespondHandlerProtocol(Protocol):
     async def parse_command(
         self, chat_id: int, command: Commands, input_value: str | None = None
