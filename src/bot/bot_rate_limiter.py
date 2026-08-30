@@ -1,9 +1,7 @@
 import asyncio
 import logging
 import time
-# Global rate limiter rule: make an object that has internal counter,
-# when the internal counter limit hits before the n reset time,
-# make the add() method blocks until the counter resets again
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ class BotRateLimiter:
         self._counter: int = 0  # initial counter value is 0
         self._cond = asyncio.Condition()
 
-    async def add(self) -> None:
+    async def acquire(self) -> None:
         """
         Increment by 1 to the internal counter,
         if the internal counter hits the limit before the reset time,

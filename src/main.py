@@ -84,7 +84,7 @@ async def run_app(
         )
     bot_service = BotService(etl_query, bot_query)
     bot_rate_limiter = BotRateLimiter(limit=29, limit_reset_interval=1)
-    user_rate_limiter = UserRateLimiter(response_cooldown=10)
+    user_rate_limiter = UserRateLimiter(response_cooldown=1)
     bot_state_handler = BotStateHandler(bot_query)
     location_flow_handler = LocationFlowHandler(location_finder)
     bot_respond_handler = BotRespondHandler(bot_service, location_flow_handler)
