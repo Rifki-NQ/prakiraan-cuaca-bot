@@ -105,24 +105,24 @@ class BotHandler:
         Parse the update object then pass it into BotRespondHandler,
         after that, send the respond message with retry mechanism.
         """
-        await self._semaphore.acquire()  # limit the concurrency
-        update_context = self._parse_update(update)
-        if update_context is None:
-            logger.info("Skip responding to non Message context")
-            return
-        logger.info(
-            f"chat_id: ({update_context.chat_id}), "
-            f"command: ({update_context.command}), "
-            f"command_value: ({update_context.command_value})"
-        )
-        respond_message = await self.respond_handler.parse_command(
-            chat_id=update_context.chat_id,
-            command=update_context.command,
-            input_value=update_context.command_value,
-        )
-        await self._send_messsage_with_retry(
-            bot, update_context.chat_id, respond_message
-        )
+        async with self._semaphore:
+            update_context = self._parse_update(update)
+            if update_context is None:
+                logger.info("Skip responding to non Message context")
+                return
+            logger.info(
+                f"chat_id: ({update_context.chat_id}), "
+                f"command: ({update_context.command}), "
+                f"command_value: ({update_context.command_value})"
+            )
+            respond_message = await self.respond_handler.parse_command(
+                chat_id=update_context.chat_id,
+                command=update_context.command,
+                input_value=update_context.command_value,
+            )
+            await self._send_messsage_with_retry(
+                bot, update_context.chat_id, respond_message
+            )
 
     def _create_send_bot_error_message_task(
         self, bot: Bot, chat_id: int, err_message: str
@@ -137,8 +137,8 @@ class BotHandler:
         self, bot: Bot, chat_id: int, err_message: str
     ) -> None:
         """Send an error message to user."""
-        await self._semaphore.acquire()  # limit the concurrency
-        await self._send_messsage_with_retry(bot, chat_id, err_message)
+        async with self._semaphore:
+            await self._send_messsage_with_retry(bot, chat_id, err_message)
 
     async def _send_messsage_with_retry(
         self, bot: Bot, chat_id: int, message: str
@@ -149,7 +149,9 @@ class BotHandler:
         """
         for attempt in range(self.SEND_MESSAGE_RETRY_ATTEMPT):
             try:
-                await self.bot_rate_limiter.add()  # telagram rate limited prevention
+                await (
+                    self.bot_rate_limiter.acquire()
+                )  # telagram rate limited prevention
                 await self.user_rate_limiter.acquire(
                     chat_id
                 )  # bot user spam prevention
@@ -206,7 +208,6 @@ class BotHandler:
                 logger.debug(f"Task: {task.get_name()} finished successfully")
                 return
             finally:
-                self._semaphore.release()  # release one slot of concurrency
                 self._active_tasks.discard(task)
             logger.debug(f"Task: {task.get_name()} finished with error")
 
