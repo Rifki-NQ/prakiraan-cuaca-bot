@@ -180,7 +180,9 @@ class LocationFlowHandler:
                 adm4_code=address.kode_adm4,
             )
         except EmptyQueryResultError as e:
-            logger.error(f"Unexpected: no address found for the adm4_code: {e}")
+            logger.error(
+                f"Unexpected: no address found for the adm4_code: {e.query.get('adm4_code')}"
+            )
             raise_data_integrity_error(chat_id, "entire")
 
     async def get_adm4_code_or_raise(
@@ -209,7 +211,7 @@ class LocationFlowHandler:
                 "Unexpected: adm4_code lookup returned empty result\n"
                 f"for validated city_or_regency: {e.query.get('city_or_regency')}, "
                 f"and validated subdistrict: {e.query.get('subdistrict')}, "
-                f"and validate village: {e.query.get('village')}"
+                f"and validated village: {e.query.get('village')}"
             )
             raise_data_integrity_error(chat_id, "entire")
 
