@@ -129,14 +129,12 @@ def test_can_run_call_over_time_interval(bot_state_handler: BotStateHandler) -> 
     bot_state_handler._last_offset_store = last_offset_store_dt  # pyright: ignore[reportPrivateUsage]
     result = bot_state_handler._can_run(current_datetime=current_dt)  # pyright: ignore[reportPrivateUsage]
     assert result
-    
-    
-def test_can_run_call_exact_time_interval(
-    bot_state_handler: BotStateHandler
-) -> None:
+
+
+def test_can_run_call_exact_time_interval(bot_state_handler: BotStateHandler) -> None:
     """
     Test if bot_state_handler._can_run() return True,
-    when current_datetime minus self._last_offset_interval 
+    when current_datetime minus self._last_offset_interval
     is the same with OFFSET_STORE_INTERVAL.
     """
     last_offset_store_dt = datetime(2020, 1, 1, 1, 1, 1)
