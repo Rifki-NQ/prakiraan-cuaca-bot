@@ -261,7 +261,7 @@ class LocationFlowHandler:
                 "Unexpected: subdistrict lookup returned empty result\n"
                 f"for validated city_or_regency: {e.query.get('city_or_regency')}"
             )
-            raise_data_integrity_error(chat_id, "city_or_regency")
+            raise_data_integrity_error(chat_id, "city or regency")
 
     async def _get_villages_or_raise(
         self, chat_id: int, city_or_regency: str, subdistrict: str
@@ -277,7 +277,7 @@ class LocationFlowHandler:
                 f"for validated city_or_regency: {e.query.get('city_or_regency')}, "
                 f"and validated subdistrict: {e.query.get('subdistrict')}"
             )
-            raise_data_integrity_error(chat_id, "city_or_regency and subdistrict")
+            raise_data_integrity_error(chat_id, "city or regency and subdistrict")
 
     # TODO: make different dataclass with different Optional fields after
     #       filtering it on this method to avoid duplicated, unnecessary assert obj.attr
@@ -295,7 +295,7 @@ class LocationFlowHandler:
             logger.error(
                 f"Unexpected: missing bot_user_state data for chat_id: {chat_id}"
             )
-            raise_data_integrity_error(chat_id, "city_or_regency")
+            raise_data_integrity_error(chat_id, "city or regency")
         if attr_check_level is None:
             return user_state
         if (
@@ -305,7 +305,7 @@ class LocationFlowHandler:
             logger.error(
                 f"Unexpected: missing city_or_regency data from bot_user_state table for chat_id: {chat_id}"
             )
-            raise_data_integrity_error(chat_id, "city_or_regency")
+            raise_data_integrity_error(chat_id, "city or regency")
         if (
             user_state.kecamatan is None
             and attr_check_level >= UserStateCheckLevel.SUBDISTRICT
@@ -313,7 +313,7 @@ class LocationFlowHandler:
             logger.error(
                 f"Unexpected: missing subdistrict data from bot_user_state table for chat_id: {chat_id}"
             )
-            raise_data_integrity_error(chat_id, "subdistrict")
+            raise_data_integrity_error(chat_id, "city or regency and subdistrict")
         if (
             user_state.desa_atau_kelurahan is None
             and attr_check_level >= UserStateCheckLevel.VILLAGE
@@ -321,7 +321,7 @@ class LocationFlowHandler:
             logger.error(
                 f"Unexpected: missing village data from bot_user_state table for chat_id: {chat_id}"
             )
-            raise_data_integrity_error(chat_id, "village")
+            raise_data_integrity_error(chat_id, "entire")
         return user_state
 
     def _build_flow_result(

@@ -11,7 +11,7 @@ def raise_data_integrity_error(chat_id: int, re_enter_value: str) -> NoReturn:
     """
     raise DataIntegrityError(
         chat_id,
-        f"Error: system failure occured, please re-input your {re_enter_value} location",
+        f"Something went wrong, please re-input your {re_enter_value} location",
     )
 
 
