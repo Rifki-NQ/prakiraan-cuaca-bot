@@ -1,14 +1,15 @@
 import asyncio
 import logging
 import time
+from src.exceptions import BotThrottlerError
 
 
 logger = logging.getLogger(__name__)
 
 
-class BotRateLimiter:
+class GlobalRespondThrottler:
     """
-    A rate limiter designed to prevent the bot from getting
+    A throttler designed to prevent the bot from getting
     itself rate limited by telegram,
     by keeping the Bot.send_message to all chats under n times each second.
     """
@@ -22,6 +23,7 @@ class BotRateLimiter:
         self._limit_reset_interval = limit_reset_interval
         self._counter: int = 0  # initial counter value is 0
         self._cond = asyncio.Condition()
+        self._reset_time_is_running = False
 
     async def acquire(self) -> None:
         """
@@ -29,6 +31,8 @@ class BotRateLimiter:
         if the internal counter hits the limit before the reset time,
         the incoming increment will queue until the next reset.
         """
+        if not self._reset_time_is_running:
+            raise BotThrottlerError("start_reset_timer() has not called yet!")
         async with self._cond:  # acquire the lock
             # check if counter has reached limit,
             # recheck again even after self._cond.notify_all() by the timer
@@ -45,14 +49,15 @@ class BotRateLimiter:
     async def start_reset_timer(self) -> None:
         """
         Start the timer for the internal counter reset,
-        this method needs to be called as a Task to run it concurrently
-        with the add() method.
+        this method needs to be called as a Task to make it
+        non blocking.
         """
         logger.info(
             "limit reset timer started, "
-            f"increment/add limit: {self._limit} per reset, "
+            f"increment/acquire limit: {self._limit} per reset, "
             f"reset interval: every {self._limit_reset_interval} seconds"
         )
+        self._reset_time_is_running = True
         while True:
             await asyncio.sleep(self._limit_reset_interval)  # sleeps for n seconds
             async with self._cond:  # acquire the lock
@@ -61,14 +66,21 @@ class BotRateLimiter:
             # release the lock here
 
 
-class UserRateLimiter:
-    """A rate limiter designed to prevent the bot from user spam."""
+class UserRespondThrottler:
+    """A throttler designed to prevent the bot from user spam."""
+
+    STALE_DATA_DELETE_CYCLE = 60  # every 60 seconds
 
     def __init__(self, response_cooldown: int) -> None:
         self._response_cooldown = response_cooldown
         self._users_last_acquire: dict[int, float] = {}
+        self._delete_stale_data_cycle_is_running = False
 
     async def acquire(self, chat_id: int) -> None:
+        if not self._delete_stale_data_cycle_is_running:
+            raise BotThrottlerError(
+                "start_delete_stale_data_cycle() has not called yet!"
+            )
         last_acquire = self._users_last_acquire.get(chat_id, None)
         if last_acquire is None:
             # save this user last acquire time to the dict
@@ -91,3 +103,27 @@ class UserRateLimiter:
                 f"user {chat_id} rate limited, cooldown for {sleep_value} second"
             )
             await asyncio.sleep(sleep_value)
+
+    async def start_delete_stale_data_cycle(self) -> None:
+        """
+        Start the cycle of stale data deletion,
+        this method needs to be called as a Task to make it
+        non blocking.
+        """
+        self._delete_stale_data_cycle_is_running = True
+        while True:
+            await asyncio.sleep(self.STALE_DATA_DELETE_CYCLE)
+            self._delete_stale_data()
+
+    def _delete_stale_data(self) -> None:
+        """
+        Delete the stale data by collecting which chat_id
+        last_acquire data is stale in a list, then delete it after.
+        """
+        stale_chat_ids: list[int] = []
+        for chat_id, last_acquire in self._users_last_acquire.items():
+            if (time.monotonic() - last_acquire) >= 30:
+                stale_chat_ids.append(chat_id)
+        for chat_id in stale_chat_ids:
+            del self._users_last_acquire[chat_id]
+        logger.debug(f"stale data deleted, total deleted: {len(stale_chat_ids)}")

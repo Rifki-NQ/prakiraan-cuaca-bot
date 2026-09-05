@@ -101,13 +101,14 @@ class BotStateHandlerProtocol(Protocol):
     async def store_offset(self, bot_token: str, offset: int) -> None: ...
 
 
-class BotRateLimiterProtocol(Protocol):
+class GlobalRespondThrottlerProtocol(Protocol):
     async def acquire(self) -> None: ...
     async def start_reset_timer(self) -> None: ...
 
 
-class UserRateLimiterProtocol(Protocol):
+class UserRespondThrottlerProtocol(Protocol):
     async def acquire(self, chat_id: int) -> None: ...
+    async def start_delete_stale_data_cycle(self) -> None: ...
 
 
 class BotRespondHandlerProtocol(Protocol):

@@ -9,8 +9,8 @@ from src.models.contexts import BotUpdateContext
 from src.models.protocols import (
     BotRespondHandlerProtocol,
     BotStateHandlerProtocol,
-    BotRateLimiterProtocol,
-    UserRateLimiterProtocol,
+    GlobalRespondThrottlerProtocol,
+    UserRespondThrottlerProtocol,
 )
 from src.exceptions import (
     BotHandlerError,
@@ -36,13 +36,13 @@ class BotHandler:
         self,
         respond_handler: BotRespondHandlerProtocol,
         bot_state: BotStateHandlerProtocol,
-        bot_rate_limiter: BotRateLimiterProtocol,
-        user_rate_limiter: UserRateLimiterProtocol,
+        global_throttler: GlobalRespondThrottlerProtocol,
+        user_throttler: UserRespondThrottlerProtocol,
     ) -> None:
         self.respond_handler = respond_handler
         self.bot_state = bot_state
-        self.bot_rate_limiter = bot_rate_limiter
-        self.user_rate_limiter = user_rate_limiter
+        self.global_throttler = global_throttler
+        self.user_throttler = user_throttler
         # self._background_tasks holds a reference for tasks that
         # run for indefinitely in the background
         self._background_tasks: set[asyncio.Task[None]] = set()
@@ -53,7 +53,7 @@ class BotHandler:
 
     async def run_bot(self, bot_token: str) -> None:
         """Run the bot, retry the long polling if timed out."""
-        self._create_rate_limiter_timer_task()
+        self._create_throttlers_task()
         while True:
             try:
                 logger.info("Bot long polling started")
@@ -95,7 +95,7 @@ class BotHandler:
     def _create_respond_to_update_task(self, bot: Bot, update: Update) -> None:
         """Create the task for _respond_to_update()"""
         task = asyncio.create_task(self._respond_to_update(bot, update))
-        task.set_name(f"Task-{update.update_id}")
+        task.set_name(f"respond-for-{update.update_id}")
         self._active_tasks.add(task)
         chat_id = update.effective_chat.id if update.effective_chat else None
         task.add_done_callback(self._handle_task_completion(bot, chat_id))
@@ -150,11 +150,11 @@ class BotHandler:
         for attempt in range(self.SEND_MESSAGE_RETRY_ATTEMPT):
             try:
                 await (
-                    self.bot_rate_limiter.acquire()
-                )  # telagram rate limited prevention
-                await self.user_rate_limiter.acquire(
+                    self.global_throttler.acquire()  # telagram rate limited prevention
+                )
+                await self.user_throttler.acquire(  # bot user spam prevention
                     chat_id
-                )  # bot user spam prevention
+                )
                 await bot.send_message(
                     chat_id,
                     message,
@@ -225,11 +225,19 @@ class BotHandler:
             await self.bot_state.store_offset(bot_token, current_offset)
             return current_offset
 
-    def _create_rate_limiter_timer_task(self) -> None:
-        """Create the task for self.bot_rate_limiter.start_reset_timer()."""
-        task = asyncio.create_task(self.bot_rate_limiter.start_reset_timer())
-        task.set_name("Bot-Rate-Limiter-reset-timer")
-        self._background_tasks.add(task)
+    def _create_throttlers_task(self) -> None:
+        """
+        Create the task for self.global_throttler.start_reset_timer()
+        and the task for self.user_throttler.start_delete_stale_data_cycle().
+        """
+        task_1 = asyncio.create_task(self.global_throttler.start_reset_timer())
+        task_1.set_name("global-throttler-reset-timer")
+        task_2 = asyncio.create_task(
+            self.user_throttler.start_delete_stale_data_cycle()
+        )
+        task_2.set_name("user-throttler-delete-stale-data-cycle")
+        self._background_tasks.add(task_1)
+        self._background_tasks.add(task_2)
 
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
         """Parse the update object then convert it into BotUpdateContext."""

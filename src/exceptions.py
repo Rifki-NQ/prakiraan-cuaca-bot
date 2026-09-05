@@ -133,3 +133,7 @@ class SendMessageRetryExhaustedError(BotHandlerError):
             f"chat_id: {chat_id}, "
             f"dropped_message: {dropped_message}",
         )
+
+
+class BotThrottlerError(DomainError):
+    """Raised when RespondThrottler related error occured"""
