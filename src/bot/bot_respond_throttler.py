@@ -24,6 +24,7 @@ class GlobalRespondThrottler:
         self._counter: int = 0  # initial counter value is 0
         self._cond = asyncio.Condition()
         self._reset_time_is_running = False
+        self._background_timer_task: asyncio.Task[None] | None = None
 
     async def acquire(self) -> None:
         """
@@ -32,7 +33,7 @@ class GlobalRespondThrottler:
         the incoming increment will queue until the next reset.
         """
         if not self._reset_time_is_running:
-            raise BotThrottlerError("start_reset_timer() has not called yet!")
+            raise BotThrottlerError("start_reset_timer() has not called yet")
         async with self._cond:  # acquire the lock
             # check if counter has reached limit,
             # recheck again even after self._cond.notify_all() by the timer
@@ -46,18 +47,21 @@ class GlobalRespondThrottler:
             self._counter += 1  # increment the counter by one
         # release the lock here
 
-    async def start_reset_timer(self) -> None:
-        """
-        Start the timer for the internal counter reset,
-        this method needs to be called as a Task to make it
-        non blocking.
-        """
+    def start_reset_timer(self) -> None:
+        """Start the timer for the internal counter reset."""
+        if self._reset_time_is_running:
+            raise BotThrottlerError("start_reset_timer() can only be called once")
+        self._reset_time_is_running = True
         logger.info(
             "limit reset timer started, "
             f"increment/acquire limit: {self._limit} per reset, "
             f"reset interval: every {self._limit_reset_interval} seconds"
         )
-        self._reset_time_is_running = True
+        task = asyncio.create_task(self._run_reset_loop())
+        task.set_name("global-throttler-reset-timer-task")
+        self._background_timer_task = task
+
+    async def _run_reset_loop(self) -> None:
         while True:
             await asyncio.sleep(self._limit_reset_interval)  # sleeps for n seconds
             async with self._cond:  # acquire the lock
