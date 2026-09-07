@@ -43,17 +43,13 @@ class BotHandler:
         self.bot_state = bot_state
         self.global_throttler = global_throttler
         self.user_throttler = user_throttler
-        # self._background_tasks holds a reference for tasks that
-        # run for indefinitely in the background
-        self._background_tasks: set[asyncio.Task[None]] = set()
-        # self._active_tasks holds a reference for tasks
-        # that run then finish
         self._active_tasks: set[asyncio.Task[None]] = set()
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
 
     async def run_bot(self, bot_token: str) -> None:
         """Run the bot, retry the long polling if timed out."""
-        self._create_throttlers_task()
+        self.global_throttler.start_reset_timer()
+        self.user_throttler.start_delete_stale_data_cycle()
         while True:
             try:
                 logger.info("Bot long polling started")
@@ -224,20 +220,6 @@ class BotHandler:
             current_offset = updates[-1].update_id + 1
             await self.bot_state.store_offset(bot_token, current_offset)
             return current_offset
-
-    def _create_throttlers_task(self) -> None:
-        """
-        Create the task for self.global_throttler.start_reset_timer()
-        and the task for self.user_throttler.start_delete_stale_data_cycle().
-        """
-        task_1 = asyncio.create_task(self.global_throttler.start_reset_timer())
-        task_1.set_name("global-throttler-reset-timer")
-        task_2 = asyncio.create_task(
-            self.user_throttler.start_delete_stale_data_cycle()
-        )
-        task_2.set_name("user-throttler-delete-stale-data-cycle")
-        self._background_tasks.add(task_1)
-        self._background_tasks.add(task_2)
 
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
         """Parse the update object then convert it into BotUpdateContext."""

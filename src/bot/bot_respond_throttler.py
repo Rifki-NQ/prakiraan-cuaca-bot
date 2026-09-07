@@ -77,57 +77,49 @@ class UserRespondThrottler:
 
     def __init__(self, response_cooldown: int) -> None:
         self._response_cooldown = response_cooldown
-        self._users_last_acquire: dict[int, float] = {}
+        self._users_next_slot: dict[int, float] = {}
         self._delete_stale_data_cycle_is_running = False
+        self._background_stale_data_deletion_task: asyncio.Task[None] | None = None
 
     async def acquire(self, chat_id: int) -> None:
         if not self._delete_stale_data_cycle_is_running:
             raise BotThrottlerError(
-                "start_delete_stale_data_cycle() has not called yet!"
+                "start_delete_stale_data_cycle() has not called yet"
             )
-        last_acquire = self._users_last_acquire.get(chat_id, None)
-        if last_acquire is None:
-            # save this user last acquire time to the dict
-            # then return and let this user continue
-            self._users_last_acquire[chat_id] = time.monotonic()
-            logger.debug(f"new last acquire data for user {chat_id}")
+        now = time.monotonic()
+        next_slot = self._users_next_slot.get(chat_id, now)
+        if now >= next_slot:
+            self._users_next_slot[chat_id] = now + self._response_cooldown
             return
-        current_acquire = time.monotonic()
-        # then get the passed time between the two points of acquire
-        acquires_interval = current_acquire - last_acquire
-        # save the current_acquire to the dict
-        self._users_last_acquire[chat_id] = current_acquire
-        if acquires_interval < self._response_cooldown:
-            # Remaining wait = full cooldown minus time already elapsed
-            # since this user's last message. So the wait is dynamic per
-            # user, not a fixed delay — someone who's already waited longer
-            # gets a shorter sleep, and vice versa.
-            sleep_value = self._response_cooldown - acquires_interval
-            logger.info(
-                f"user {chat_id} rate limited, cooldown for {sleep_value} second"
+        wait_time = next_slot - now
+        self._users_next_slot[chat_id] = next_slot + self._response_cooldown
+        logger.debug(f"user {chat_id} throttled, cooldown for {wait_time}")
+        await asyncio.sleep(wait_time)
+
+    def start_delete_stale_data_cycle(self) -> None:
+        """Start the cycle of stale data deletion."""
+        if self._delete_stale_data_cycle_is_running:
+            raise BotThrottlerError(
+                "start_delete_stale_data_cycle() can only be called once"
             )
-            await asyncio.sleep(sleep_value)
-
-    async def start_delete_stale_data_cycle(self) -> None:
-        """
-        Start the cycle of stale data deletion,
-        this method needs to be called as a Task to make it
-        non blocking.
-        """
         self._delete_stale_data_cycle_is_running = True
-        while True:
-            await asyncio.sleep(self.STALE_DATA_DELETE_CYCLE)
-            self._delete_stale_data()
+        task = asyncio.create_task(self._run_delete_stale_data_loop())
+        task.set_name("user-throttler-stale-data-deletion-task")
+        self._background_stale_data_deletion_task = task
 
-    def _delete_stale_data(self) -> None:
+    async def _run_delete_stale_data_loop(self) -> None:
         """
         Delete the stale data by collecting which chat_id
         last_acquire data is stale in a list, then delete it after.
         """
-        stale_chat_ids: list[int] = []
-        for chat_id, last_acquire in self._users_last_acquire.items():
-            if (time.monotonic() - last_acquire) >= 30:
-                stale_chat_ids.append(chat_id)
-        for chat_id in stale_chat_ids:
-            del self._users_last_acquire[chat_id]
-        logger.debug(f"stale data deleted, total deleted: {len(stale_chat_ids)}")
+        while True:
+            await asyncio.sleep(self.STALE_DATA_DELETE_CYCLE)
+            stale_chat_ids: list[int] = []
+            for chat_id, last_acquire in self._users_next_slot.items():
+                # consider the data as stale when this user last_acquire data
+                # is more than 30 seconds old relative to now
+                if (time.monotonic() - last_acquire) > 30:
+                    stale_chat_ids.append(chat_id)
+            for chat_id in stale_chat_ids:
+                del self._users_next_slot[chat_id]
+            logger.debug(f"stale data deleted, total deleted: {len(stale_chat_ids)}")
