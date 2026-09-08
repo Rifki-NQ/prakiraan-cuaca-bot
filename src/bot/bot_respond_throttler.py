@@ -93,7 +93,7 @@ class UserRespondThrottler:
             return
         wait_time = next_slot - now
         self._users_next_slot[chat_id] = next_slot + self._response_cooldown
-        logger.debug(f"user {chat_id} throttled, cooldown for {wait_time}")
+        logger.debug(f"user {chat_id} throttled, cooldown for {wait_time:.2f} second")
         await asyncio.sleep(wait_time)
 
     def start_delete_stale_data_cycle(self) -> None:
