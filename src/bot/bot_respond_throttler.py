@@ -73,7 +73,10 @@ class GlobalRespondThrottler:
 class UserRespondThrottler:
     """A throttler designed to prevent the bot from user spam."""
 
-    STALE_DATA_DELETE_CYCLE = 60  # every 60 seconds
+    STALE_DATA_DELETE_CYCLE: int = 60  # check then delete stale data every n second
+    DATA_STALE_AFTER_SECONDS: int = (
+        30  # data older than this (in seconds) is considered stale
+    )
 
     def __init__(self, response_cooldown: int) -> None:
         self._response_cooldown = response_cooldown
@@ -117,8 +120,8 @@ class UserRespondThrottler:
             stale_chat_ids: list[int] = []
             for chat_id, last_acquire in self._users_next_slot.items():
                 # consider the data as stale when this user last_acquire data
-                # is more than 30 seconds old relative to now
-                if (time.monotonic() - last_acquire) > 30:
+                # is more than n second relative to when this runs
+                if (time.monotonic() - last_acquire) > self.DATA_STALE_AFTER_SECONDS:
                     stale_chat_ids.append(chat_id)
             for chat_id in stale_chat_ids:
                 del self._users_next_slot[chat_id]
