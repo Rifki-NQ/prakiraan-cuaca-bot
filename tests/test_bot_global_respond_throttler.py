@@ -10,12 +10,12 @@ from src.exceptions import BotThrottlerError
 
 @pytest.fixture
 def limit(request: pytest.FixtureRequest) -> int:
-    return request.param
+    return request.param  # type: ignore[no-any-return]
 
 
 @pytest.fixture
 def limit_reset_interval(request: pytest.FixtureRequest) -> int:
-    return request.param
+    return request.param  # type: ignore[no-any-return]
 
 
 @pytest_asyncio.fixture

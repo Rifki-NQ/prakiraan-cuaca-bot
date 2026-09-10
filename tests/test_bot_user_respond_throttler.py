@@ -19,7 +19,7 @@ def response_cooldown(request: pytest.FixtureRequest) -> int:
         # default to 1 if there is no response_cooldown provided
         # by pytest.mark.parametrize (indirect=True)
         response_cooldown = 1
-    return response_cooldown
+    return response_cooldown  # type: ignore[no-any-return]
 
 
 @pytest_asyncio.fixture
