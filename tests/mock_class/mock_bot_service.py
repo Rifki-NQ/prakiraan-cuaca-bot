@@ -1,29 +1,38 @@
 import asyncio
 from typing import Any
 from collections.abc import AsyncIterable
+import logging
 from datetime import datetime
 from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
 from src.models.contexts import BotUserStateContext
 from src.models.domain_model import ForecastModel, BotUserModel, BotUserStateModel
 
 
+logger = logging.getLogger(__name__)
+
+
 class MockBotService:
-    # TODO: return mocked data for all methods
+    """
+    Mock the BotService, for get and create_or_update methods, logs
+    the call without returning anything.
+
+    Use unittest.mock if specific return value is needed for the get methods.
+    """
 
     async def create_or_update_user(self, user: BotUserModel) -> None:
-        pass
+        logger.debug("create_or_update_user called")
 
-    async def get_user(self, chat_id: int) -> BotUserModel | None:
-        pass
+    async def get_user(self, chat_id: int) -> BotUserModel | None:  # type: ignore
+        logger.debug("get_user called")
 
     async def resolve_user_location_state(self, chat_id: int) -> BotUserStateContext:  # type: ignore
-        pass
+        logger.debug("resolve_user_location_state called")
 
     async def create_or_update_user_state(self, user_state: BotUserStateModel) -> None:
-        pass
+        logger.debug("create_or_update_user_state called")
 
-    async def get_user_state(self, chat_id: int) -> BotUserStateModel | None:
-        pass
+    async def get_user_state(self, chat_id: int) -> BotUserStateModel | None:  # type: ignore
+        logger.debug("get_user_state called")
 
     def get_today_weather_forecast(
         self, adm4_code: str
