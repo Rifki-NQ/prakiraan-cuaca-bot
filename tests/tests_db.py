@@ -30,7 +30,7 @@ class BotTestDBContext:
 
 class ETLTestDB:
     def __init__(self) -> None:
-        self._db: ETLTestDBContext | None
+        self._db: ETLTestDBContext | None = None
 
     async def setup_etl_test_db(
         self, test_db_url: str, etl_engine: AsyncEngine
@@ -98,7 +98,7 @@ class ETLTestDB:
 
 class BotTestDB:
     def __init__(self) -> None:
-        self._db: BotTestDBContext | None
+        self._db: BotTestDBContext | None = None
 
     async def setup_bot_test_db(
         self, test_db_url: str, bot_engine: AsyncEngine
