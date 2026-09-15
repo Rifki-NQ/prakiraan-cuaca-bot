@@ -2,7 +2,6 @@ import asyncio
 import logging
 from collections.abc import Callable
 from telegram import Bot, Update, MessageEntity
-from telegram.request import HTTPXRequest
 from telegram.error import TimedOut, RetryAfter, BadRequest, NetworkError
 from src.models.enums import Commands
 from src.models.contexts import BotUpdateContext
@@ -26,8 +25,7 @@ logger = logging.getLogger(__name__)
 
 class BotHandler:
     MAX_CONCURRENT_TASKS = 15
-    CONNECTION_POOL_SIZE = MAX_CONCURRENT_TASKS + 2
-    UPDATE_TIMEOUT = 30  # bot long polling value
+    POLLING_TIMEOUT = 30
     SEND_MESSAGE_TIMEOUT = 2  # 2 seconds before retry mechanism trigger
     SEND_MESSAGE_RETRY_ATTEMPT = 3  # max retry attempt
     SEND_MESSAGE_RETRY_DELAY = 0.5  # delay per retry attempt
@@ -45,48 +43,88 @@ class BotHandler:
         self.user_throttler = user_throttler
         self._active_tasks: set[asyncio.Task[None]] = set()
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
+        self._bot_is_running = False
+        self._long_polling_is_running = False
 
     async def run_bot(self, bot_token: str) -> None:
         """Run the bot, retry the long polling if timed out."""
+        if self._bot_is_running:
+            logger.warning("Bot is already running, no need to run again")
+            return
+        logger.info("Bot started")
+        self._bot_is_running = True
         self.global_throttler.start_reset_timer()
         self.user_throttler.start_delete_stale_data_cycle()
-        while True:
-            try:
-                logger.info("Bot long polling started")
-                current_offset = await self.bot_state.get_offset(bot_token)
-                await self._start_long_polling(bot_token, current_offset)
-            except TimedOut:
-                logger.warning("Bot long polling timed out, retrying")
-                continue
+        try:
+            while self._bot_is_running:
+                try:
+                    current_offset = await self.bot_state.get_offset(bot_token)
+                    await self._start_long_polling(bot_token, current_offset)
+                except TimedOut:
+                    logger.warning("Bot long polling timed out, retrying")
+                    continue
+        finally:
+            self.stop_bot()
+
+    def stop_bot(self) -> None:
+        """
+        Stop the bot by flipping both self._long_polling_is_running
+        and self._bot_is_running to False.
+        """
+        if not self._bot_is_running:
+            logger.warning("Bot is not running, no need to stop")
+            return
+        self._stop_long_polling()
+        self._bot_is_running = False
+        logger.info("Bot stopped")
+
+    def _stop_long_polling(self) -> None:
+        """
+        Stop the bot long polling by flipping
+        the self._long_polling_is_running to False.
+        """
+        if not self._long_polling_is_running:
+            logger.warning("Long polling is not running, no need to stop")
+            return
+        self._long_polling_is_running = False
+        logger.info("Long polling stopped")
 
     async def _start_long_polling(
         self, bot_token: str, current_offset: int | None
     ) -> None:
         """
-        Start the bot long polling,
+        Start the bot long polling loop,
         persist the offset whenever get_updates return update objects.
         """
-        request = HTTPXRequest(
-            connection_pool_size=self.CONNECTION_POOL_SIZE,
-            pool_timeout=5,
-            connect_timeout=5,
-            read_timeout=self.UPDATE_TIMEOUT + 5,
-        )
-        async with Bot(bot_token, request=request) as bot:
-            if current_offset is None:
-                current_offset = await self._get_offset_from_latest_update(
-                    bot_token, bot
-                )
-            while True:
-                logger.info(f"Checking bot update - offset num: {current_offset}")
-                updates = await bot.get_updates(
-                    offset=current_offset, timeout=self.UPDATE_TIMEOUT
-                )
-                if updates:
-                    current_offset = updates[-1].update_id + 1
+        try:
+            if self._long_polling_is_running:
+                logger.warning("long polling already started, no need to start again")
+                return
+            async with Bot(bot_token) as bot:
+                if current_offset is None:
+                    # if current_offset does not exist in the db
+                    # set it to -1 so it will only proceed the latest update
+                    current_offset = -1
+                # start the long polling loop
+                self._long_polling_is_running = True
+                logger.info("Bot long polling loop started")
+                while self._long_polling_is_running:
+                    current_offset = await self._poll_once(bot, current_offset)
                     await self.bot_state.store_offset(bot_token, current_offset)
-                for update in updates:
-                    self._create_respond_to_update_task(bot, update)
+        finally:
+            self._stop_long_polling()
+
+    async def _poll_once(self, bot: Bot, current_offset: int) -> int:
+        """Poll once then return the latest offset"""
+        logger.info(f"Checking bot update - current offset: {current_offset}")
+        updates = await bot.get_updates(
+            offset=current_offset, timeout=self.POLLING_TIMEOUT
+        )
+        for update in updates:
+            self._create_respond_to_update_task(bot, update)
+        if updates:
+            current_offset = updates[-1].update_id + 1
+        return current_offset
 
     def _create_respond_to_update_task(self, bot: Bot, update: Update) -> None:
         """Create the task for _respond_to_update()"""
@@ -116,7 +154,7 @@ class BotHandler:
                 command=update_context.command,
                 input_value=update_context.command_value,
             )
-            await self._send_messsage_with_retry(
+            await self._send_message_with_retry(
                 bot, update_context.chat_id, respond_message
             )
 
@@ -134,9 +172,9 @@ class BotHandler:
     ) -> None:
         """Send an error message to user."""
         async with self._semaphore:
-            await self._send_messsage_with_retry(bot, chat_id, err_message)
+            await self._send_message_with_retry(bot, chat_id, err_message)
 
-    async def _send_messsage_with_retry(
+    async def _send_message_with_retry(
         self, bot: Bot, chat_id: int, message: str
     ) -> None:
         """
@@ -208,18 +246,6 @@ class BotHandler:
             logger.debug(f"Task: {task.get_name()} finished with error")
 
         return _cb
-
-    async def _get_offset_from_latest_update(self, bot_token: str, bot: Bot) -> int:
-        """In case offset not found on db, get the latest one from Bot, then store it."""
-        while True:
-            logger.debug("Checking for latest update offset")
-            updates = await bot.get_updates(offset=-1, timeout=self.UPDATE_TIMEOUT)
-            if not updates:
-                continue
-            logger.debug(f"Latest update found: offset num ({updates[0].update_id})")
-            current_offset = updates[-1].update_id + 1
-            await self.bot_state.store_offset(bot_token, current_offset)
-            return current_offset
 
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
         """Parse the update object then convert it into BotUpdateContext."""
