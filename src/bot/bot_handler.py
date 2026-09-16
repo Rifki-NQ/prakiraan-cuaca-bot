@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from telegram import Bot, Update, MessageEntity
 from telegram.error import TimedOut, RetryAfter, BadRequest, NetworkError
 from src.models.enums import Commands
@@ -60,8 +61,8 @@ class BotHandler:
                 try:
                     current_offset = await self.bot_state.get_offset(bot_token)
                     await self._start_long_polling(bot_token, current_offset)
-                except TimedOut:
-                    logger.warning("Bot long polling timed out, retrying")
+                except NetworkError as e:
+                    logger.warning(f"Network error occured: {repr(e)}, retrying")
                     continue
         finally:
             self.stop_bot()
@@ -201,6 +202,10 @@ class BotHandler:
                 logger.debug(
                     f"send_message timed out, chat_id: {chat_id}, retry attempt: {attempt}"
                 )
+            except RetryAfter as e:
+                retry_after = self._parse_retry_after(e.retry_after)
+                logger.debug(f"rate limited, retry send message after: {retry_after}")
+                await asyncio.sleep(retry_after)
         raise SendMessageRetryExhaustedError(
             chat_id, self.SEND_MESSAGE_RETRY_ATTEMPT, message
         )
@@ -228,8 +233,6 @@ class BotHandler:
                     logger.info("Skip responding to non Chat context")
                 else:
                     self._create_send_bot_error_message_task(bot, chat_id, e.message)
-            except RetryAfter as e:
-                logger.error(f"Rate limited, chat_id: {chat_id}, error: {repr(e)}")
             except BadRequest as e:
                 logger.error(f"Bad request: chat_id: {chat_id}, error: {repr(e)}")
             except NetworkError as e:
@@ -246,6 +249,12 @@ class BotHandler:
             logger.debug(f"Task: {task.get_name()} finished with error")
 
         return _cb
+
+    def _parse_retry_after(self, retry_after: int | timedelta) -> float:
+        if isinstance(retry_after, timedelta):
+            return retry_after.total_seconds()
+        else:
+            return float(retry_after)
 
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
         """Parse the update object then convert it into BotUpdateContext."""
