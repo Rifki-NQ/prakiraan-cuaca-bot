@@ -172,7 +172,7 @@ def format_one_forecast(
         f"☁️ Cloud Cover: {ttc}%\n"
         f"🌧 Precipitation: {tp} mm\n"
         f"💨 Wind: {ws} km/h\n"
-        f"👁 Visibility: {visibility} km\n"
+        f"👁 Visibility: {visibility} m\n"
     )
 
 
