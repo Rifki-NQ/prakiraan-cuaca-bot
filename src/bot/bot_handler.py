@@ -60,7 +60,7 @@ class BotHandler:
             while self._bot_is_running:
                 try:
                     current_offset = await self.bot_state.get_offset(bot_token)
-                    await self._start_long_polling(bot_token, current_offset)
+                    await self._start_polling_loop(bot_token, current_offset)
                 except NetworkError as e:
                     logger.warning(f"Network error occured: {repr(e)}, retrying")
                     continue
@@ -75,22 +75,22 @@ class BotHandler:
         if not self._bot_is_running:
             logger.warning("Bot is not running, no need to stop")
             return
-        self._stop_long_polling()
+        self._stop_polling_loop()
         self._bot_is_running = False
         logger.info("Bot stopped")
 
-    def _stop_long_polling(self) -> None:
+    def _stop_polling_loop(self) -> None:
         """
         Stop the bot long polling by flipping
         the self._long_polling_is_running to False.
         """
         if not self._long_polling_is_running:
-            logger.warning("Long polling is not running, no need to stop")
+            logger.warning("polling loop is not running, no need to stop")
             return
         self._long_polling_is_running = False
         logger.info("Long polling stopped")
 
-    async def _start_long_polling(
+    async def _start_polling_loop(
         self, bot_token: str, current_offset: int | None
     ) -> None:
         """
@@ -113,7 +113,7 @@ class BotHandler:
                     current_offset = await self._poll_once(bot, current_offset)
                     await self.bot_state.store_offset(bot_token, current_offset)
         finally:
-            self._stop_long_polling()
+            self._stop_polling_loop()
 
     async def _poll_once(self, bot: Bot, current_offset: int) -> int:
         """Poll once then return the latest offset"""
