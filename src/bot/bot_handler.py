@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 class BotHandler:
-    MAX_CONCURRENT_TASKS = 15
-    POLLING_TIMEOUT = 30
-    SEND_MESSAGE_TIMEOUT = 2  # 2 seconds before retry mechanism trigger
-    SEND_MESSAGE_RETRY_ATTEMPT = 3  # max retry attempt
-    SEND_MESSAGE_RETRY_DELAY = 0.5  # delay per retry attempt
+    MAX_CONCURRENT_TASKS: int = 15
+    POLLING_TIMEOUT: int = 30
+    SEND_MESSAGE_TIMEOUT: float = 2  # 2 seconds before retry mechanism trigger
+    SEND_MESSAGE_RETRY_ATTEMPT: int = 3  # max retry attempt
+    SEND_MESSAGE_RETRY_DELAY: float = 0.5  # delay per retry attempt
 
     def __init__(
         self,
