@@ -1,5 +1,4 @@
 from datetime import datetime
-from src.models.enums import UserLocationState
 
 
 class DomainError(Exception):
@@ -100,16 +99,6 @@ class NotCommandTypeError(BotHandlerError):
     def __init__(self, chat_id: int, text: str) -> None:
         self.text = text
         super().__init__(chat_id, f"Error: {text} is not a command")
-
-
-class InvalidUserStateError(BotHandlerError):
-    """Raised when user current state is invalid"""
-
-    def __init__(
-        self, chat_id: int, message: str, current_user_state: UserLocationState
-    ) -> None:
-        self.current_user_state = current_user_state
-        super().__init__(chat_id, message)
 
 
 class DataIntegrityError(BotHandlerError):
