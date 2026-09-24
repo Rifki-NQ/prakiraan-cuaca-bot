@@ -34,9 +34,10 @@ os.environ["PTB_TIMEDELTA"] = "1"  # avoid PTBDeprecationWarning
 
 FAKE_BOT_TOKEN = "fake_bot_token"
 FAKE_CURRENT_OFFSET = 0
+FAKE_CHAT_ID = 1
 FAKE_UPDATE = Update(update_id=1)
 FAKE_UPDATE_CONTEXT = BotUpdateContext(
-    chat_id=1, command=Commands.START, command_value="karawang"
+    chat_id=FAKE_CHAT_ID, command=Commands.START, command_value="karawang"
 )
 FAKE_RESPOND_MESSAGE = "fake respond message"
 FAKE_RETRY_ATTEMPT = 5
@@ -491,14 +492,14 @@ class TestRespondToUpdate:
         bot_handler_context.fake_respond_handler.assert_called_once_with(
             bot_handler.respond_handler.parse_command,
             [
-                FAKE_UPDATE_CONTEXT.chat_id,
+                FAKE_CHAT_ID,
                 FAKE_UPDATE_CONTEXT.command,
                 FAKE_UPDATE_CONTEXT.command_value,
             ],
         )
         mock["_send_message_with_retry"].assert_awaited_once_with(
             bot_handler_context.fake_bot,
-            FAKE_UPDATE_CONTEXT.chat_id,
+            FAKE_CHAT_ID,
             FAKE_RESPOND_MESSAGE,  # based on tests/mock_class/mock_bot_respond_handler.py
         )
 
@@ -560,14 +561,14 @@ class TestCreateSendBotErrorMessageTask:
         assert not bot_handler._active_tasks  # assert no active_task yet
         bot_handler._create_send_bot_error_message_task(
             bot=bot_handler_context.fake_bot,
-            chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+            chat_id=FAKE_CHAT_ID,
             err_message="fake err message",
         )
         await asyncio.sleep(0)
         assert len(bot_handler._active_tasks) == 1
         assert (
             list(bot_handler._active_tasks)[0].get_name()
-            == f"Error-Message-{FAKE_UPDATE_CONTEXT.chat_id}"
+            == f"Error-Message-{FAKE_CHAT_ID}"
         )
 
     async def test_called_methods_and_args(
@@ -579,16 +580,16 @@ class TestCreateSendBotErrorMessageTask:
         ) as mock_methods:
             bot_handler._create_send_bot_error_message_task(
                 bot=bot_handler_context.fake_bot,
-                chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                chat_id=FAKE_CHAT_ID,
                 err_message="fake err message",
             )
         mock_methods["_send_error_message"].assert_called_once_with(
             bot_handler_context.fake_bot,
-            FAKE_UPDATE_CONTEXT.chat_id,
+            FAKE_CHAT_ID,
             "fake err message",
         )
         mock_methods["_handle_task_completion"].assert_called_once_with(
-            bot_handler_context.fake_bot, FAKE_UPDATE_CONTEXT.chat_id
+            bot_handler_context.fake_bot, FAKE_CHAT_ID
         )
 
 
@@ -599,11 +600,11 @@ async def test_send_error_message_called_methods_and_args(
     with patch.object(bot_handler, "_send_message_with_retry") as mock_method:
         await bot_handler._send_error_message(
             bot=bot_handler_context.fake_bot,
-            chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+            chat_id=FAKE_CHAT_ID,
             err_message="fake err message",
         )
     mock_method.assert_awaited_once_with(
-        bot_handler_context.fake_bot, FAKE_UPDATE_CONTEXT.chat_id, "fake err message"
+        bot_handler_context.fake_bot, FAKE_CHAT_ID, "fake err message"
     )
 
 
@@ -633,7 +634,7 @@ async def test_send_error_message_concurrency_is_bounded(
             *(
                 bot_handler._send_error_message(
                     bot=bot_handler_context.fake_bot,
-                    chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                    chat_id=FAKE_CHAT_ID,
                     err_message="fake err message",
                 )
                 for _ in range(total_tasks)
@@ -653,17 +654,17 @@ class TestSendMessageWithRetry:
         with patch.object(bot_handler_context.fake_bot, "send_message") as mock_method:
             await bot_handler._send_message_with_retry(
                 bot=bot_handler_context.fake_bot,
-                chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                chat_id=FAKE_CHAT_ID,
                 message=FAKE_RESPOND_MESSAGE,
             )
         bot_handler_context.fake_global_throttler.assert_called_once(
             bot_handler.global_throttler.acquire
         )
         bot_handler_context.fake_user_throttler.assert_called_once_with(
-            bot_handler.user_throttler.acquire, [FAKE_UPDATE_CONTEXT.chat_id]
+            bot_handler.user_throttler.acquire, [FAKE_CHAT_ID]
         )
         mock_method.assert_awaited_once_with(
-            FAKE_UPDATE_CONTEXT.chat_id,
+            FAKE_CHAT_ID,
             FAKE_RESPOND_MESSAGE,
             parse_mode="HTML",
             read_timeout=bot_handler.SEND_MESSAGE_TIMEOUT,
@@ -702,7 +703,7 @@ class TestSendMessageWithRetry:
         ):
             await bot_handler._send_message_with_retry(
                 bot=bot_handler_context.fake_bot,
-                chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                chat_id=FAKE_CHAT_ID,
                 message=FAKE_RESPOND_MESSAGE,
             )
         assert mock_send_message_method.call_count == 2
@@ -732,7 +733,7 @@ class TestSendMessageWithRetry:
         ) as mock_method:
             await bot_handler._send_message_with_retry(
                 bot=bot_handler_context.fake_bot,
-                chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                chat_id=FAKE_CHAT_ID,
                 message=FAKE_RESPOND_MESSAGE,
             )
         # the total delay should be 0.4 since the delay per attempt is 0.2
@@ -761,7 +762,7 @@ class TestSendMessageWithRetry:
         ) as mock_method:
             await bot_handler._send_message_with_retry(
                 bot=bot_handler_context.fake_bot,
-                chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                chat_id=FAKE_CHAT_ID,
                 message=FAKE_RESPOND_MESSAGE,
             )
         assert (time.monotonic() - before) == pytest.approx(0.2, rel=0.01)
@@ -783,10 +784,10 @@ class TestSendMessageWithRetry:
             with pytest.raises(exceptions.SendMessageRetryExhaustedError) as exc_info:
                 await bot_handler._send_message_with_retry(
                     bot=bot_handler_context.fake_bot,
-                    chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                    chat_id=FAKE_CHAT_ID,
                     message=FAKE_RESPOND_MESSAGE,
                 )
-        assert exc_info.value.chat_id == FAKE_UPDATE_CONTEXT.chat_id
+        assert exc_info.value.chat_id == FAKE_CHAT_ID
         assert exc_info.value.retry_attempt == FAKE_RETRY_ATTEMPT
         assert exc_info.value.dropped_message == FAKE_RESPOND_MESSAGE
         # assert actual call_count of send_message()
@@ -805,11 +806,11 @@ class TestSendMessageWithRetry:
             with pytest.raises(type(raised_error)):
                 await bot_handler._send_message_with_retry(
                     bot=bot_handler_context.fake_bot,
-                    chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                    chat_id=FAKE_CHAT_ID,
                     message=FAKE_RESPOND_MESSAGE,
                 )
         mock_method.assert_awaited_once_with(
-            FAKE_UPDATE_CONTEXT.chat_id,
+            FAKE_CHAT_ID,
             FAKE_RESPOND_MESSAGE,
             parse_mode="HTML",
             read_timeout=bot_handler.SEND_MESSAGE_TIMEOUT,
@@ -842,14 +843,16 @@ class TestHandleTaskCompletion:
             task.add_done_callback(
                 self.bot_handler_context.bot_handler._handle_task_completion(
                     bot=self.bot_handler_context.fake_bot,
-                    chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                    chat_id=FAKE_CHAT_ID,
                 )
             )
             return task
 
-        def create_error_task(self, remove_chat_id_in_callback: bool = False) -> asyncio.Task[None]:
+        def create_error_task(
+            self, remove_chat_id_in_callback: bool = False
+        ) -> asyncio.Task[None]:
             """Create a fake task that sleeps for 0 second then raise an error"""
-            chat_id = FAKE_UPDATE_CONTEXT.chat_id
+            chat_id = FAKE_CHAT_ID
             if remove_chat_id_in_callback:
                 chat_id = None
 
@@ -967,7 +970,7 @@ class TestHandleTaskCompletion:
         "exec",
         [
             exceptions.SendMessageRetryExhaustedError(
-                chat_id=FAKE_UPDATE_CONTEXT.chat_id,
+                chat_id=FAKE_CHAT_ID,
                 retry_attempt=FAKE_RETRY_ATTEMPT,
                 dropped_message=FAKE_RESPOND_MESSAGE,
             )
@@ -981,7 +984,7 @@ class TestHandleTaskCompletion:
         task = task_factory.create_error_task()
         with pytest.raises(exceptions.SendMessageRetryExhaustedError) as exc_info:
             await task
-        assert exc_info.value.chat_id == FAKE_UPDATE_CONTEXT.chat_id
+        assert exc_info.value.chat_id == FAKE_CHAT_ID
         assert exc_info.value.retry_attempt == FAKE_RETRY_ATTEMPT
         assert exc_info.value.dropped_message == FAKE_RESPOND_MESSAGE
         assert "retry attempt reached" in caplog.messages[0]
@@ -993,13 +996,11 @@ class TestHandleTaskCompletion:
     @pytest.mark.parametrize(
         "exec",
         [
-            exceptions.EmptyCommandError(FAKE_UPDATE_CONTEXT.chat_id),
-            exceptions.NoForecastResultError(
-                FAKE_UPDATE_CONTEXT.chat_id, FAKE_RESPOND_MESSAGE
-            ),
-            exceptions.InvalidCommandError(FAKE_UPDATE_CONTEXT.chat_id, "fake command"),
-            exceptions.NotCommandTypeError(FAKE_UPDATE_CONTEXT.chat_id, "fake text"),
-            exceptions.DataIntegrityError(FAKE_UPDATE_CONTEXT.chat_id, "fake message"),
+            exceptions.EmptyMessageTextError(FAKE_CHAT_ID),
+            exceptions.NoForecastResultError(FAKE_CHAT_ID, FAKE_RESPOND_MESSAGE),
+            exceptions.InvalidCommandError(FAKE_CHAT_ID, "fake command"),
+            exceptions.NotCommandTypeError(FAKE_CHAT_ID, "fake text"),
+            exceptions.DataIntegrityError(FAKE_CHAT_ID, "fake message"),
         ],
         indirect=True,
     )
@@ -1024,22 +1025,20 @@ class TestHandleTaskCompletion:
         assert "finished with error" in caplog.messages[1]
         mock_method.assert_called_once_with(
             bot_handler_context.fake_bot,
-            FAKE_UPDATE_CONTEXT.chat_id,
+            FAKE_CHAT_ID,
             task_factory.exec.message,
         )
-        
+
         await cancel_task(task)
-        
+
     @pytest.mark.parametrize(
         "exec",
         [
-            exceptions.EmptyCommandError(FAKE_UPDATE_CONTEXT.chat_id),
-            exceptions.NoForecastResultError(
-                FAKE_UPDATE_CONTEXT.chat_id, FAKE_RESPOND_MESSAGE
-            ),
-            exceptions.InvalidCommandError(FAKE_UPDATE_CONTEXT.chat_id, "fake command"),
-            exceptions.NotCommandTypeError(FAKE_UPDATE_CONTEXT.chat_id, "fake text"),
-            exceptions.DataIntegrityError(FAKE_UPDATE_CONTEXT.chat_id, "fake message"),
+            exceptions.EmptyMessageTextError(FAKE_CHAT_ID),
+            exceptions.NoForecastResultError(FAKE_CHAT_ID, FAKE_RESPOND_MESSAGE),
+            exceptions.InvalidCommandError(FAKE_CHAT_ID, "fake command"),
+            exceptions.NotCommandTypeError(FAKE_CHAT_ID, "fake text"),
+            exceptions.DataIntegrityError(FAKE_CHAT_ID, "fake message"),
         ],
         indirect=True,
     )
@@ -1064,14 +1063,10 @@ class TestHandleTaskCompletion:
         assert "Skip responding to non Chat context" in caplog.messages[1]
         assert "finished with error" in caplog.messages[2]
         mock_method.assert_not_called()
-        
+
         await cancel_task(task)
-        
-    @pytest.mark.parametrize(
-        "exec",
-        [BadRequest("fake bad request")],
-        indirect=True
-    )
+
+    @pytest.mark.parametrize("exec", [BadRequest("fake bad request")], indirect=True)
     async def test_callback_when_bad_request_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -1081,13 +1076,11 @@ class TestHandleTaskCompletion:
             await task
         assert "Bad request:" in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
-        
+
         await cancel_task(task)
-        
+
     @pytest.mark.parametrize(
-        "exec",
-        [NetworkError("fake network error")],
-        indirect=True
+        "exec", [NetworkError("fake network error")], indirect=True
     )
     async def test_callback_when_network_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
@@ -1098,14 +1091,10 @@ class TestHandleTaskCompletion:
             await task
         assert "Network error:" in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
-        
+
         await cancel_task(task)
-        
-    @pytest.mark.parametrize(
-        "exec",
-        [asyncio.CancelledError()],
-        indirect=True
-    )
+
+    @pytest.mark.parametrize("exec", [asyncio.CancelledError()], indirect=True)
     async def test_callback_when_cancelled_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -1115,25 +1104,243 @@ class TestHandleTaskCompletion:
             await task
         assert "Task was cancelled" in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
-        
+
         await cancel_task(task)
-        
+
     @pytest.mark.parametrize(
-        "exec",
-        [FakeException(), RuntimeError(), AttributeError()],
-        indirect=True
+        "exec", [FakeException(), RuntimeError(), AttributeError()], indirect=True
     )
     async def test_callback_when_exception_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
         caplog.set_level(10)
         task = task_factory.create_error_task()
-        assert isinstance(task_factory.exec, Exception), "passed exception should be part of Exception!"
+        assert isinstance(task_factory.exec, Exception), (
+            "passed exception should be part of Exception!"
+        )
         with pytest.raises(type(task_factory.exec)):
             await task
         assert f"Unexpected error: {repr(task_factory.exec)}" in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
-        
+
         await cancel_task(task)
-        
-# TODO: add test cases for the remained methods
+
+
+def test_parse_retry_after_when_passed_arg_is_int_type(
+    bot_handler_context: BotHandlerContext,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    value = 1
+    result = bot_handler._parse_retry_after(value)
+    assert isinstance(result, float)
+    assert value == 1
+
+
+@pytest.mark.parametrize(
+    "passed_value, expected_return",
+    [
+        (timedelta(seconds=1), 1),
+        (timedelta(seconds=65), 65),
+        (timedelta(minutes=30), 1800),
+        (timedelta(hours=1), 3600),
+    ],
+)
+def test_parse_retry_after_when_passed_arg_is_timedelta_type(
+    bot_handler_context: BotHandlerContext,
+    passed_value: timedelta,
+    expected_return: float,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    result = bot_handler._parse_retry_after(passed_value)
+    assert isinstance(result, float)
+    assert result == expected_return
+
+
+class TestParseUpdate:
+    @pytest.fixture
+    def fake_update(self) -> Mock:
+        mock = Mock()
+        mock.message.chat_id = FAKE_CHAT_ID
+        return mock
+
+    def test_when_all_is_valid_where_the_splitted_text_length_is_one(
+        self, bot_handler_context: BotHandlerContext, fake_update: Mock
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        fake_update.message.text = "/start"
+        result = bot_handler._parse_update(update=fake_update)
+        assert result is not None
+        assert result.chat_id == FAKE_CHAT_ID
+        assert result.command == Commands.START
+        assert result.command_value is None
+
+    @pytest.mark.parametrize(
+        "text, expected_return",
+        [
+            (
+                "/start value_a",
+                BotUpdateContext(FAKE_CHAT_ID, Commands.START, "value_a"),
+            ),
+            (
+                "/start value_a value_b",
+                BotUpdateContext(FAKE_CHAT_ID, Commands.START, "value_a value_b"),
+            ),
+            (
+                "/help my bini gw",
+                BotUpdateContext(FAKE_CHAT_ID, Commands.HELP, "my bini gw"),
+            ),
+        ],
+    )
+    def test_when_all_is_valid_where_the_splitted_text_length_is_more_than_one(
+        self,
+        bot_handler_context: BotHandlerContext,
+        fake_update: Mock,
+        text: str,
+        expected_return: BotUpdateContext,
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        fake_update.message.text = text
+        result = bot_handler._parse_update(update=fake_update)
+        assert result == expected_return
+
+    def test_when_update_message_is_none(
+        self, bot_handler_context: BotHandlerContext, fake_update: Mock
+    ) -> None:
+        """Test that _parse_update() return None when Update.message is None"""
+        bot_handler = bot_handler_context.bot_handler
+        fake_update.message = None
+        result = bot_handler._parse_update(update=fake_update)
+        assert result is None
+
+    def test_when_update_message_text_is_none(
+        self, bot_handler_context: BotHandlerContext, fake_update: Mock
+    ) -> None:
+        """
+        Possible to happen in a case where the Update obj contains a Message obj
+        where it's not a plain text, for example photo, caption, video, voice, etc
+        """
+        bot_handler = bot_handler_context.bot_handler
+        fake_update.message.text = None
+        with pytest.raises(exceptions.EmptyMessageTextError) as exec_info:
+            bot_handler._parse_update(update=fake_update)
+        assert exec_info.value.chat_id == FAKE_CHAT_ID
+        assert exec_info.value.message == "This bot can only proceed plain text"
+
+    @pytest.mark.parametrize("text", ["start", "start value_a", "value_a /start"])
+    def test_when_update_message_first_text_is_not_a_command(
+        self, bot_handler_context: BotHandlerContext, fake_update: Mock, text: str
+    ) -> None:
+        """
+        Test when user send a plain text where the first text
+        does not start with a slash (/), which mean it's not a command
+        """
+        bot_handler = bot_handler_context.bot_handler
+        fake_update.message.text = text
+        with pytest.raises(exceptions.NotCommandTypeError) as exec_info:
+            bot_handler._parse_update(update=fake_update)
+        assert exec_info.value.chat_id == FAKE_CHAT_ID
+        assert exec_info.value.text == text.split()[0]
+        assert (
+            exec_info.value.message
+            == "First text have to be a command, started with / (a slash)"
+        )
+
+    def test_when_command_text_is_not_valid(
+        self, bot_handler_context: BotHandlerContext, fake_update: Mock
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        invalid_command = "/wkwkwk"
+        fake_update.message.text = invalid_command
+        # assert first that the fake message text command is invalid
+        with suppress(ValueError):
+            Commands(invalid_command)
+            assert False, (
+                f"{invalid_command} is a valid Commands, when its expected to be invalid"
+            )
+        with pytest.raises(exceptions.InvalidCommandError) as exec_info:
+            bot_handler._parse_update(update=fake_update)
+        assert exec_info.value.chat_id == FAKE_CHAT_ID
+        assert exec_info.value.command == invalid_command
+        assert (
+            exec_info.value.message
+            == f"{invalid_command} is not a known command, type /help to see available commands"
+        )
+
+
+def test_validate_text_is_not_none_when_passed_text_is_not_none(
+    bot_handler_context: BotHandlerContext,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    result = bot_handler._validate_text_is_not_none(
+        text="fake text", chat_id=FAKE_CHAT_ID
+    )
+    assert result == "fake text"
+
+
+def test_validate_text_is_not_none_when_passed_text_is_none(
+    bot_handler_context: BotHandlerContext,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    with pytest.raises(exceptions.EmptyMessageTextError) as exec_info:
+        bot_handler._validate_text_is_not_none(text=None, chat_id=FAKE_CHAT_ID)
+    assert exec_info.value.chat_id == FAKE_CHAT_ID
+    assert exec_info.value.message == "This bot can only proceed plain text"
+
+
+def test_validate_first_text_is_command_when_first_text_start_with_slash(
+    bot_handler_context: BotHandlerContext,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    result = bot_handler._validate_first_text_is_command(
+        first_text="/fake_command", chat_id=FAKE_CHAT_ID
+    )
+    assert result == "/fake_command"
+
+
+def test_validate_first_text_is_command_when_first_text_does_not_start_with_slash(
+    bot_handler_context: BotHandlerContext,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    with pytest.raises(exceptions.NotCommandTypeError) as exec_info:
+        bot_handler._validate_first_text_is_command(
+            first_text="fake_command", chat_id=FAKE_CHAT_ID
+        )
+    assert exec_info.value.chat_id == FAKE_CHAT_ID
+    assert exec_info.value.text == "fake_command"
+    assert (
+        exec_info.value.message
+        == "First text have to be a command, started with / (a slash)"
+    )
+
+
+def test_validate_command_is_valid_when_passed_command_is_valid(
+    bot_handler_context: BotHandlerContext,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    result = bot_handler._validate_command_is_valid(
+        command_text="/start", chat_id=FAKE_CHAT_ID
+    )
+    assert result == Commands.START
+
+
+def test_validate_command_is_valid_when_passed_command_is_not_valid(
+    bot_handler_context: BotHandlerContext,
+) -> None:
+    bot_handler = bot_handler_context.bot_handler
+    invalid_command = "/wkwkwk"
+    # assert first that the invalid_command is truly invalid
+    with suppress(ValueError):
+        Commands(invalid_command)
+        assert False, (
+            f"{invalid_command} is a valid Commands, when its expected to be invalid"
+        )
+    with pytest.raises(exceptions.InvalidCommandError) as exec_info:
+        bot_handler._validate_command_is_valid(
+            command_text=invalid_command, chat_id=FAKE_CHAT_ID
+        )
+    assert exec_info.value.chat_id == FAKE_CHAT_ID
+    assert exec_info.value.command == invalid_command
+    assert (
+        exec_info.value.message
+        == f"{invalid_command} is not a known command, type /help to see available commands"
+    )
