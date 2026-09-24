@@ -68,11 +68,11 @@ class DBNotInitializedError(QueryError):
         super().__init__(f"Error: {message}")
 
 
-class EmptyCommandError(BotHandlerError):
-    """Raised when user send empty text or command"""
+class EmptyMessageTextError(BotHandlerError):
+    """Raised when user send empty text in the message"""
 
     def __init__(self, chat_id: int) -> None:
-        super().__init__(chat_id, "Error: command can't be empty")
+        super().__init__(chat_id, "This bot can only proceed plain text")
 
 
 class NoForecastResultError(BotHandlerError):
@@ -86,19 +86,24 @@ class NoForecastResultError(BotHandlerError):
 
 
 class InvalidCommandError(BotHandlerError):
-    """Raised when user send invalid command"""
+    """Raised when user send invalid or not-known command"""
 
     def __init__(self, chat_id: int, command: str) -> None:
         self.command = command
-        super().__init__(chat_id, f"Error: {command} is not a recognized command")
+        super().__init__(
+            chat_id,
+            f"{command} is not a known command, type /help to see available commands",
+        )
 
 
 class NotCommandTypeError(BotHandlerError):
-    """Raised when user send non command text"""
+    """Raised when user send non-command first text"""
 
     def __init__(self, chat_id: int, text: str) -> None:
         self.text = text
-        super().__init__(chat_id, f"Error: {text} is not a command")
+        super().__init__(
+            chat_id, "First text have to be a command, started with / (a slash)"
+        )
 
 
 class DataIntegrityError(BotHandlerError):

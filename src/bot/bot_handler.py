@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import timedelta
-from telegram import Bot, Update, MessageEntity
+from telegram import Bot, Update
 from telegram.error import TimedOut, RetryAfter, BadRequest, NetworkError
 from src.models.enums import Commands
 from src.models.contexts import BotUpdateContext
@@ -14,7 +14,7 @@ from src.models.protocols import (
 )
 from src.exceptions import (
     BotHandlerError,
-    EmptyCommandError,
+    EmptyMessageTextError,
     InvalidCommandError,
     NotCommandTypeError,
     SendMessageRetryExhaustedError,
@@ -257,36 +257,45 @@ class BotHandler:
             return float(retry_after)
 
     def _parse_update(self, update: Update) -> BotUpdateContext | None:
-        """Parse the update object then convert it into BotUpdateContext."""
-        if update.message is not None:
-            chat_id = update.message.chat_id
-            text = self._validate_text_is_not_none(update.message.text, chat_id).split()
-            command = self._validate_first_text_is_command(
-                update.message.entities, text[0], chat_id
-            )
-            try:
-                if len(text) == 1:
-                    # return only the /command if there is no value after it
-                    return BotUpdateContext(chat_id, Commands(command))
-                else:
-                    # return the /command plus the values after it
-                    command_value = " ".join(text[1:])
-                    return BotUpdateContext(chat_id, Commands(command), command_value)
-            except ValueError:
-                raise InvalidCommandError(chat_id, command)
-        return None
-
-    def _validate_first_text_is_command(
-        self, entities: tuple[MessageEntity, ...], text: str, chat_id: int
-    ) -> str:
-        """Raise error if entities does not contain a bot_command type."""
-        for entity in entities:
-            if entity.type == "bot_command":
-                return text
-        raise NotCommandTypeError(chat_id, text)
+        """Parse the update object, validate it,
+        then convert it into BotUpdateContext."""
+        if update.message is None:
+            return None
+        text = update.message.text
+        chat_id = update.message.chat_id
+        text = self._validate_text_is_not_none(text, chat_id)
+        splitted_text = text.split()
+        command_text = self._validate_first_text_is_command(splitted_text[0], chat_id)
+        command_enum = self._validate_command_is_valid(command_text, chat_id)
+        if len(splitted_text) == 1:
+            # return only the /command if there is no value after it
+            return BotUpdateContext(chat_id, command_enum)
+        else:
+            # return the /command plus the values after it
+            command_value = " ".join(splitted_text[1:])
+            return BotUpdateContext(chat_id, Commands(command_enum), command_value)
 
     def _validate_text_is_not_none(self, text: str | None, chat_id: int) -> str:
-        """Raise error when the text is either None or empty string."""
-        if text is None or not text:
-            raise EmptyCommandError(chat_id)
+        """Raise EmptyTextError if passed text is None"""
+        if text is None:
+            raise EmptyMessageTextError(chat_id)
         return text
+
+    def _validate_first_text_is_command(self, first_text: str, chat_id: int) -> str:
+        """
+        raise NotCommandTypeError if the passed first_text does not
+        start with / or a slash.
+        """
+        if not first_text.startswith("/"):
+            raise NotCommandTypeError(chat_id, first_text)
+        return first_text
+
+    def _validate_command_is_valid(self, command_text: str, chat_id: int) -> Commands:
+        """
+        Raise InvalidCommandError if the passed command_text
+        is not known based on src.models.enums.Commands
+        """
+        try:
+            return Commands(command_text)
+        except ValueError:
+            raise InvalidCommandError(chat_id, command_text)
