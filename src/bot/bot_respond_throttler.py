@@ -23,7 +23,7 @@ class GlobalRespondThrottler:
         self._limit_reset_interval = limit_reset_interval
         self._counter: int = 0  # initial counter value is 0
         self._cond = asyncio.Condition()
-        self._reset_time_is_running = False
+        self._reset_timer_is_running = False
         self._background_timer_task: asyncio.Task[None] | None = None
 
     async def acquire(self) -> None:
@@ -32,7 +32,7 @@ class GlobalRespondThrottler:
         if the internal counter hits the limit before the reset time,
         the incoming increment will queue until the next reset.
         """
-        if not self._reset_time_is_running:
+        if not self._reset_timer_is_running:
             raise BotThrottlerError("start_reset_timer() has not called yet")
         async with self._cond:  # acquire the lock
             # check if counter has reached limit,
@@ -49,9 +49,9 @@ class GlobalRespondThrottler:
 
     def start_reset_timer(self) -> None:
         """Start the timer for the internal counter reset."""
-        if self._reset_time_is_running:
+        if self._reset_timer_is_running:
             raise BotThrottlerError("start_reset_timer() can only be called once")
-        self._reset_time_is_running = True
+        self._reset_timer_is_running = True
         logger.info(
             "limit reset timer started, "
             f"increment/acquire limit: {self._limit} per reset, "
@@ -60,6 +60,31 @@ class GlobalRespondThrottler:
         task = asyncio.create_task(self._run_reset_loop())
         task.set_name("global-throttler-reset-timer-task")
         self._background_timer_task = task
+
+    async def stop_reset_timer(self) -> None:
+        if not self._reset_timer_is_running:
+            raise BotThrottlerError("reset timer is not running, no need to stop")
+        assert isinstance(self._background_timer_task, asyncio.Task), (
+            "self._background_timer_task should always be asyncio.Task[None], "
+            "when self._reset_timer_is_running is True"
+        )
+        try:
+            # before cancelling the task
+            # reset the counter to zero then wake up all waiters
+            async with self._cond:
+                self._counter = 0
+                self._cond.notify_all()
+            self._background_timer_task.cancel()
+            await self._background_timer_task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error("reset timer task ended unexpectedly", exc_info=e)
+            raise
+        finally:
+            self._reset_timer_is_running = False
+            self._background_timer_task = None
+            logger.debug("reset timer stopped")
 
     async def _run_reset_loop(self) -> None:
         while True:
