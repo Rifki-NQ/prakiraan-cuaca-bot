@@ -22,6 +22,7 @@ class GlobalRespondThrottler:
         self._limit = limit
         self._limit_reset_interval = limit_reset_interval
         self._counter: int = 0  # initial counter value is 0
+        self._waiting_num: int = 0
         self._cond = asyncio.Condition()
         self._reset_timer_is_running = False
         self._reset_timer_task: asyncio.Task[None] | None = None
@@ -34,18 +35,14 @@ class GlobalRespondThrottler:
         """
         if not self._reset_timer_is_running:
             raise BotThrottlerError("start_reset_timer() has not called yet")
-        async with self._cond:  # acquire the lock
-            # check if counter has reached limit,
-            # recheck again even after self._cond.notify_all() by the timer
+        async with self._cond:
             while self._counter >= self._limit:
-                await (
-                    self._cond.wait()
-                )  # release the lock then wait here until notified
-                # after notified, re-acquire the lock
-                # then recheck the condition of the _counter
-                # if the _counter is >= self._limit, wait again until next notify
-            self._counter += 1  # increment the counter by one
-        # release the lock here
+                self._waiting_num += 1
+                try:
+                    await self._cond.wait()
+                finally:
+                    self._waiting_num -= 1
+            self._counter += 1
 
     def start_reset_timer(self) -> None:
         """Start the timer for the internal counter reset."""
@@ -62,37 +59,54 @@ class GlobalRespondThrottler:
         self._reset_timer_task = task
 
     async def stop_reset_timer(self) -> None:
+        """
+        Stop or cancel the reset timer background task then
+        modify the state of self._reset_timer_is_running to False
+        and self._reset_timer_task to None.
+        
+        This method also make sure all waiters of acquire() method
+        to finish before stopping the reset timer.
+        """
         if not self._reset_timer_is_running:
             raise BotThrottlerError("reset timer is not running, no need to stop")
         assert isinstance(self._reset_timer_task, asyncio.Task), (
             "self._reset_timer_task should always be asyncio.Task[None], "
             "when self._reset_timer_is_running is True"
         )
+        self._reset_timer_task.cancel()
         try:
-            # before cancelling the task
-            # reset the counter to zero then wake up all waiters
-            async with self._cond:
-                self._counter = 0
-                self._cond.notify_all()
-            self._reset_timer_task.cancel()
             await self._reset_timer_task
         except asyncio.CancelledError:
-            pass
+            logger.debug(f"{self._reset_timer_task.get_name()} cancelled")
         except Exception as e:
             logger.error("reset timer task ended unexpectedly", exc_info=e)
             raise
         finally:
+            # flips the state of self._reset_timer_is_running to False first
+            # for the purpose of no acquire() while the waiters are drained
             self._reset_timer_is_running = False
+            await self._drain_waiters()
             self._reset_timer_task = None
             logger.debug("reset timer stopped")
 
     async def _run_reset_loop(self) -> None:
         while True:
-            await asyncio.sleep(self._limit_reset_interval)  # sleeps for n seconds
-            async with self._cond:  # acquire the lock
+            await asyncio.sleep(self._limit_reset_interval)
+            async with self._cond:
                 self._counter = 0
-                self._cond.notify_all()  # notify all wait points
-            # release the lock here
+                self._cond.notify_all()
+            
+    async def _drain_waiters(self) -> None:
+        """
+        Drain remained waiters while still adding intervals
+        between each reset window.
+        """
+        while self._waiting_num > 0:
+            await asyncio.sleep(self._limit_reset_interval)
+            async with self._cond:
+                logger.debug(f"draining remained waiters: {self._waiting_num}")
+                self._counter = 0
+                self._cond.notify_all()
 
 
 class UserRespondThrottler:
