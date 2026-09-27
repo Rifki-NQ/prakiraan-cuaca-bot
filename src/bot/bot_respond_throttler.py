@@ -24,7 +24,7 @@ class GlobalRespondThrottler:
         self._counter: int = 0  # initial counter value is 0
         self._cond = asyncio.Condition()
         self._reset_timer_is_running = False
-        self._background_timer_task: asyncio.Task[None] | None = None
+        self._reset_timer_task: asyncio.Task[None] | None = None
 
     async def acquire(self) -> None:
         """
@@ -59,13 +59,13 @@ class GlobalRespondThrottler:
         )
         task = asyncio.create_task(self._run_reset_loop())
         task.set_name("global-throttler-reset-timer-task")
-        self._background_timer_task = task
+        self._reset_timer_task = task
 
     async def stop_reset_timer(self) -> None:
         if not self._reset_timer_is_running:
             raise BotThrottlerError("reset timer is not running, no need to stop")
-        assert isinstance(self._background_timer_task, asyncio.Task), (
-            "self._background_timer_task should always be asyncio.Task[None], "
+        assert isinstance(self._reset_timer_task, asyncio.Task), (
+            "self._reset_timer_task should always be asyncio.Task[None], "
             "when self._reset_timer_is_running is True"
         )
         try:
@@ -74,8 +74,8 @@ class GlobalRespondThrottler:
             async with self._cond:
                 self._counter = 0
                 self._cond.notify_all()
-            self._background_timer_task.cancel()
-            await self._background_timer_task
+            self._reset_timer_task.cancel()
+            await self._reset_timer_task
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -83,7 +83,7 @@ class GlobalRespondThrottler:
             raise
         finally:
             self._reset_timer_is_running = False
-            self._background_timer_task = None
+            self._reset_timer_task = None
             logger.debug("reset timer stopped")
 
     async def _run_reset_loop(self) -> None:
