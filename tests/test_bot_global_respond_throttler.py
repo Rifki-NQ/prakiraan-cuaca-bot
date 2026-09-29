@@ -136,7 +136,7 @@ class TestStopResetTimer:
         assert global_respond_throttler._reset_timer_task is None
         assert task.done()
 
-    @pytest.mark.parametrize("limit, limit_reset_interval", [(30, 0.2)])
+    @pytest.mark.parametrize("limit, limit_reset_interval", [(30, 0.2)], indirect=True)
     async def test_remaining_waiters_cleared(
         self, global_respond_throttler: GlobalRespondThrottler
     ) -> None:
@@ -185,7 +185,7 @@ class TestStopResetTimer:
             await global_respond_throttler.stop_reset_timer()
         assert "reset timer task ended unexpectedly" in caplog.messages[0]
 
-    async def test_call_when_bot_is_not_running(
+    async def test_stop_when_reset_timer_is_not_running(
         self,
     ) -> None:
         global_respond_throttler = GlobalRespondThrottler(
@@ -193,3 +193,9 @@ class TestStopResetTimer:
         )
         with pytest.raises(BotThrottlerError):
             await global_respond_throttler.stop_reset_timer()
+            
+    @pytest.mark.parametrize("limit, limit_reset_interval", [(1, 0.1)], indirect=True)
+    async def test_acquire_after_stop_reset_timer(self, global_respond_throttler: GlobalRespondThrottler) -> None:
+        await global_respond_throttler.stop_reset_timer()
+        with pytest.raises(BotThrottlerError):
+            await global_respond_throttler.acquire()
