@@ -54,6 +54,9 @@ class BotHandler:
             return
         logger.info("Bot started")
         self._bot_is_running = True
+        # TODO: make stop_bot to also stop the background throttler tasks
+        # TODO: add option to exhaust or drain queued updates first before
+        #       stopping the bot or the polling
         self.global_throttler.start_reset_timer()
         self.user_throttler.start_delete_stale_data_cycle()
         try:

@@ -63,7 +63,7 @@ class GlobalRespondThrottler:
         Stop or cancel the reset timer background task then
         modify the state of self._reset_timer_is_running to False
         and self._reset_timer_task to None.
-        
+
         This method also make sure all waiters of acquire() method
         to finish before stopping the reset timer.
         """
@@ -95,7 +95,7 @@ class GlobalRespondThrottler:
             async with self._cond:
                 self._counter = 0
                 self._cond.notify_all()
-            
+
     async def _drain_waiters(self) -> None:
         """
         Drain remained waiters while still adding intervals
@@ -112,16 +112,14 @@ class GlobalRespondThrottler:
 class UserRespondThrottler:
     """A throttler designed to prevent the bot from user spam."""
 
-    STALE_DATA_DELETE_CYCLE: int = 60  # check then delete stale data every n second
-    DATA_STALE_AFTER_SECONDS: int = (
-        30  # data older than this (in seconds) is considered stale
-    )
+    STALE_DATA_DELETE_CYCLE: float = 60  # check then delete stale data every n second
+    DATA_STALE_AFTER_SECONDS: float = 30  # data older than this is considered stale
 
-    def __init__(self, response_cooldown: int) -> None:
+    def __init__(self, response_cooldown: float) -> None:
         self._response_cooldown = response_cooldown
         self._users_next_slot: dict[int, float] = {}
         self._delete_stale_data_cycle_is_running = False
-        self._background_stale_data_deletion_task: asyncio.Task[None] | None = None
+        self._delete_stale_data_cycle_task: asyncio.Task[None] | None = None
 
     async def acquire(self, chat_id: int) -> None:
         if not self._delete_stale_data_cycle_is_running:
@@ -147,7 +145,31 @@ class UserRespondThrottler:
         self._delete_stale_data_cycle_is_running = True
         task = asyncio.create_task(self._run_delete_stale_data_loop())
         task.set_name("user-throttler-stale-data-deletion-task")
-        self._background_stale_data_deletion_task = task
+        self._delete_stale_data_cycle_task = task
+
+    async def stop_delete_stale_data_cycle(self) -> None:
+        if not self._delete_stale_data_cycle_is_running:
+            raise BotThrottlerError(
+                "delete stale data cycle is not running, no need to stop"
+            )
+        assert isinstance(self._delete_stale_data_cycle_task, asyncio.Task), (
+            "self._delete_stale_data_cycle_task should always be asyncio.Task[None], "
+            "when self._delete_stale_data_cycle_is_running is True"
+        )
+        self._delete_stale_data_cycle_task.cancel()
+        try:
+            await self._delete_stale_data_cycle_task
+        except asyncio.CancelledError:
+            logger.debug(f"{self._delete_stale_data_cycle_task.get_name()} cancelled")
+        except Exception as e:
+            logger.error("delete stale data cycle task ended unexpectedly", exc_info=e)
+            raise
+        finally:
+            self._delete_stale_data_cycle_is_running = False
+            # clear users_next_slot data by assigning new dict to it
+            self._users_next_slot = {}
+            self._delete_stale_data_cycle_task = None
+            logger.debug("delete stale data cycle stopped")
 
     async def _run_delete_stale_data_loop(self) -> None:
         """
