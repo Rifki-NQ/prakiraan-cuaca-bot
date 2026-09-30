@@ -193,9 +193,11 @@ class TestStopResetTimer:
         )
         with pytest.raises(BotThrottlerError):
             await global_respond_throttler.stop_reset_timer()
-            
+
     @pytest.mark.parametrize("limit, limit_reset_interval", [(1, 0.1)], indirect=True)
-    async def test_acquire_after_stop_reset_timer(self, global_respond_throttler: GlobalRespondThrottler) -> None:
+    async def test_acquire_after_stop_reset_timer(
+        self, global_respond_throttler: GlobalRespondThrottler
+    ) -> None:
         await global_respond_throttler.stop_reset_timer()
         with pytest.raises(BotThrottlerError):
             await global_respond_throttler.acquire()

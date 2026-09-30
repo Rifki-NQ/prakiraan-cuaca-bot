@@ -54,12 +54,11 @@ class BotHandler:
             return
         logger.info("Bot started")
         self._bot_is_running = True
-        # TODO: make stop_bot to also stop the background throttler tasks
         # TODO: add option to exhaust or drain queued updates first before
         #       stopping the bot or the polling
-        self.global_throttler.start_reset_timer()
-        self.user_throttler.start_delete_stale_data_cycle()
         try:
+            self.global_throttler.start_reset_timer()
+            self.user_throttler.start_delete_stale_data_cycle()
             while self._bot_is_running:
                 try:
                     current_offset = await self.bot_state.get_offset(bot_token)
@@ -67,20 +66,33 @@ class BotHandler:
                 except NetworkError as e:
                     logger.warning(f"Network error occured: {repr(e)}, retrying")
                     continue
-        finally:
-            self.stop_bot()
+        except:
+            await self.stop_bot()
+            raise
 
-    def stop_bot(self) -> None:
+    async def stop_bot(self) -> None:
         """
         Stop the bot by flipping both self._long_polling_is_running
         and self._bot_is_running to False.
+
+        This method also stop global and user throttler background
+        tasks.
         """
         if not self._bot_is_running:
             logger.warning("Bot is not running, no need to stop")
             return
-        self._stop_polling_loop()
         self._bot_is_running = False
-        logger.info("Bot stopped")
+        self._stop_polling_loop()
+
+        stop_results = await asyncio.gather(
+            self.global_throttler.stop_reset_timer(),
+            self.user_throttler.stop_delete_stale_data_cycle(),
+            return_exceptions=True,
+        )
+        stop_errors = [r for r in stop_results if isinstance(r, Exception)]
+        if stop_errors:
+            raise ExceptionGroup("Errors while stopping the bot", stop_errors)
+        logger.debug("bot stopped")
 
     def _stop_polling_loop(self) -> None:
         """
