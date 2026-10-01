@@ -54,8 +54,6 @@ class BotHandler:
             return
         logger.info("Bot started")
         self._bot_is_running = True
-        # TODO: add option to exhaust or drain queued updates first before
-        #       stopping the bot or the polling
         try:
             self.global_throttler.start_reset_timer()
             self.user_throttler.start_delete_stale_data_cycle()
@@ -63,8 +61,10 @@ class BotHandler:
                 try:
                     current_offset = await self.bot_state.get_offset(bot_token)
                     await self._start_polling_loop(bot_token, current_offset)
+                # TODO: add backoff logic when NetworkError occured
                 except NetworkError as e:
                     logger.warning(f"Network error occured: {repr(e)}, retrying")
+                    self._long_polling_is_running = False
                     continue
         except:
             await self.stop_bot()
@@ -82,27 +82,39 @@ class BotHandler:
             logger.warning("Bot is not running, no need to stop")
             return
         self._bot_is_running = False
-        self._stop_polling_loop()
+        try:
+            await self._stop_polling_loop()
+        except Exception as e:
+            logger.error("long polling ended unexpectedly", exc_info=e)
+        finally:
+            stop_results = await asyncio.gather(
+                self.global_throttler.stop_reset_timer(),
+                self.user_throttler.stop_delete_stale_data_cycle(),
+                return_exceptions=True,
+            )
+            stop_errors = [r for r in stop_results if isinstance(r, Exception)]
+            if stop_errors:
+                raise ExceptionGroup("Errors while stopping the bot", stop_errors)
+        logger.info("bot stopped")
 
-        stop_results = await asyncio.gather(
-            self.global_throttler.stop_reset_timer(),
-            self.user_throttler.stop_delete_stale_data_cycle(),
-            return_exceptions=True,
-        )
-        stop_errors = [r for r in stop_results if isinstance(r, Exception)]
-        if stop_errors:
-            raise ExceptionGroup("Errors while stopping the bot", stop_errors)
-        logger.debug("bot stopped")
-
-    def _stop_polling_loop(self) -> None:
+    async def _stop_polling_loop(self) -> None:
         """
         Stop the bot long polling by flipping
         the self._long_polling_is_running to False.
+
+        This method also call self._drain_tasks() to let all
+        tasks to finish first before stopping the long polling.
         """
         if not self._long_polling_is_running:
             logger.warning("polling loop is not running, no need to stop")
             return
         self._long_polling_is_running = False
+        # let all active tasks to finish first if any
+        while self._active_tasks:
+            logger.debug(
+                f"draining active tasks: {len(self._active_tasks)} tasks remained"
+            )
+            await asyncio.gather(*self._active_tasks, return_exceptions=True)
         logger.info("Long polling stopped")
 
     async def _start_polling_loop(
@@ -112,23 +124,20 @@ class BotHandler:
         Start the bot long polling loop,
         persist the offset whenever get_updates return update objects.
         """
-        try:
-            if self._long_polling_is_running:
-                logger.warning("long polling already started, no need to start again")
-                return
-            async with Bot(bot_token) as bot:
-                if current_offset is None:
-                    # if current_offset does not exist in the db
-                    # set it to -1 so it will only proceed the latest update
-                    current_offset = -1
-                # start the long polling loop
-                self._long_polling_is_running = True
-                logger.info("Bot long polling loop started")
-                while self._long_polling_is_running:
-                    current_offset = await self._poll_once(bot, current_offset)
-                    await self.bot_state.store_offset(bot_token, current_offset)
-        finally:
-            self._stop_polling_loop()
+        if self._long_polling_is_running:
+            logger.warning("long polling already started, no need to start again")
+            return
+        async with Bot(bot_token) as bot:
+            if current_offset is None:
+                # if current_offset does not exist in the db
+                # set it to -1 so it will only proceed the latest update
+                current_offset = -1
+            # start the long polling loop
+            self._long_polling_is_running = True
+            logger.info("Bot long polling loop started")
+            while self._long_polling_is_running:
+                current_offset = await self._poll_once(bot, current_offset)
+                await self.bot_state.store_offset(bot_token, current_offset)
 
     async def _poll_once(self, bot: Bot, current_offset: int) -> int:
         """Poll once then return the latest offset"""
