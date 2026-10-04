@@ -11,6 +11,9 @@ class FakeGlobalRespondThrottler:
 
     def start_reset_timer(self) -> None:
         self.called_methods.append(self.start_reset_timer)
+        
+    async def stop_reset_timer(self) -> None:
+        self.called_methods.append(self.stop_reset_timer)
 
     def assert_called_once(
         self, method: Callable[..., Any], args: list[Any] | None = None
@@ -29,6 +32,9 @@ class FakeUserRespondThrottler:
 
     def start_delete_stale_data_cycle(self) -> None:
         self.called_methods.append(self.start_delete_stale_data_cycle)
+        
+    async def stop_delete_stale_data_cycle(self) -> None:
+        self.called_methods.append(self.stop_delete_stale_data_cycle)
 
     def assert_called_once_with(
         self, method: Callable[..., Any], args: list[Any] | None = None
