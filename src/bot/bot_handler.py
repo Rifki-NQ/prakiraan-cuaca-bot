@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Callable
+import time
 from datetime import timedelta
 from telegram import Bot, Update
 from telegram.error import TimedOut, RetryAfter, BadRequest, NetworkError
@@ -27,6 +28,9 @@ logger = logging.getLogger(__name__)
 class BotHandler:
     MAX_CONCURRENT_TASKS: int = 15
     POLLING_TIMEOUT: int = 30
+    INITIAL_BACKOFF_DELAY: float = 1.0
+    MAX_BACKOFF_DELAY: float = 30.0
+    RESET_BACKOFF_DELAY_AFTER: float = 60
     SEND_MESSAGE_TIMEOUT: float = 2  # 2 seconds before retry mechanism trigger
     SEND_MESSAGE_RETRY_ATTEMPT: int = 3  # max retry attempt
     SEND_MESSAGE_RETRY_DELAY: float = 0.5  # delay per retry attempt
@@ -56,14 +60,24 @@ class BotHandler:
         try:
             self.global_throttler.start_reset_timer()
             self.user_throttler.start_delete_stale_data_cycle()
+            delay = self.INITIAL_BACKOFF_DELAY
             while self._bot_is_running:
+                attempt_started = time.monotonic()
                 try:
                     current_offset = await self.bot_state.get_offset(bot_token)
                     await self._start_polling_loop(bot_token, current_offset)
-                # TODO: add backoff logic when NetworkError occured
                 except NetworkError as e:
-                    logger.warning(f"Network error occured: {repr(e)}, retrying")
-                    continue
+                    # if this attempt ran for a long time before failing, the connection was
+                    # stable, so treat this as a fresh failure and reset the backoff
+                    if (
+                        time.monotonic() - attempt_started
+                    ) >= self.RESET_BACKOFF_DELAY_AFTER:
+                        delay = self.INITIAL_BACKOFF_DELAY
+                    logger.warning(
+                        f"Network error occurred: {e!r}, retrying in {delay}s"
+                    )
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, self.MAX_BACKOFF_DELAY)
         finally:
             self._bot_is_running = False
             await self._stop_throttlers()
@@ -227,7 +241,7 @@ class BotHandler:
             """
             Logs the error if the task raised an error,
             send the error message to user if the error is BotHandlerError,
-            finally, release a semaphore then discard the task from self.active_task.
+            Lastly, discard the task from self.active_tasks.
             """
             try:
                 task.result()
