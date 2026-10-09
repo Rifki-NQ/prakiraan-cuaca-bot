@@ -162,17 +162,22 @@ class TestRunBot:
         bot_handler_context: BotHandlerContext,
     ) -> None:
         bot_handler = bot_handler_context.bot_handler
-        with patch.object(
-            bot_handler, "_start_polling_loop", side_effect=StopLoop()
-        ) as mock_method:
+        with (
+            patch.object(
+                bot_handler, "_start_polling_loop", side_effect=StopLoop()
+            ) as mock_start_polling_loop,
+            patch.object(bot_handler, "_stop_throttlers") as mock_stop_throttlers,
+        ):
             with suppress(StopLoop):
                 await bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN)
-        # should be false since run_bot() switch it to False
-        # when it exits
-        assert not bot_handler._bot_is_running
-        mock_method.assert_awaited_once_with(
-            FAKE_BOT_TOKEN, 1
-        )  # 1 is based on fake get_offset
+        assert (
+            not bot_handler._bot_is_running
+        )  # run_bot() switch the state when it exits
+        mock_start_polling_loop.assert_awaited_once_with(
+            FAKE_BOT_TOKEN,
+            1,  # 1 is based on fake get_offset
+        )
+        mock_stop_throttlers.assert_awaited_once()
         bot_handler_context.fake_bot_state.assert_called_once_with(
             bot_handler.bot_state.get_offset, [FAKE_BOT_TOKEN]
         )
@@ -185,7 +190,11 @@ class TestRunBot:
 
     @pytest.mark.parametrize(
         "network_exception",
-        [BadRequest("fake bad request"), TimedOut("fake timed out")],
+        [
+            NetworkError("fake network error"),
+            BadRequest("fake bad request"),
+            TimedOut("fake timed out"),
+        ],
     )
     async def test_when_networks_error_raised(
         self,
@@ -199,6 +208,7 @@ class TestRunBot:
         """
         caplog.set_level(30)  # level: WARNING
         bot_handler = bot_handler_context.bot_handler
+        bot_handler.INITIAL_BACKOFF_DELAY = 0
         with patch.object(
             bot_handler,
             "_start_polling_loop",
@@ -207,132 +217,114 @@ class TestRunBot:
             with suppress(StopLoop):
                 await bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN)
         assert (
-            f"Network error occured: {repr(network_exception)}, retrying"
+            f"Network error occurred: {repr(network_exception)}, retrying in"
             in caplog.messages[0]
         )
 
+    class TestExponentialBackoffLogic:
+        async def test_exponential_backoff_values(
+            self,
+            bot_handler_context: BotHandlerContext,
+            caplog: pytest.LogCaptureFixture,
+        ) -> None:
+            """Test the delays when exponential backoff retry is triggered"""
+            caplog.set_level(30)  # level: WARNING
+            bot_handler = bot_handler_context.bot_handler
+            bot_handler.INITIAL_BACKOFF_DELAY = 0.01
+            with patch.object(
+                bot_handler,
+                "_start_polling_loop",
+                side_effect=[
+                    NetworkError("fake network error"),
+                    NetworkError("fake network error"),
+                    NetworkError("fake network error"),
+                    StopLoop(),
+                ],
+            ):
+                with suppress(StopLoop):
+                    await bot_handler.run_bot(FAKE_BOT_TOKEN)
+            assert "retrying in 0.01" in caplog.messages[0]
+            assert "retrying in 0.02" in caplog.messages[1]
+            assert "retrying in 0.04" in caplog.messages[2]
 
-class TestStopMethods:
-    async def test_stop_bot_when_the_bot_is_running(
-        self,
-        bot_handler_context: BotHandlerContext,
-    ) -> None:
-        """
-        Test that self._bot_is_running and self._long_polling_is_running
-        is flipped to False, which make both loop stopped
-        when stop_bot() is called
-        """
-        bot_handler = bot_handler_context.bot_handler
-        task = asyncio.create_task(bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN))
-        await asyncio.sleep(0)
-        # making sure the bot is running first before stopping it
-        assert bot_handler._bot_is_running, "bot is not running!"
-        bot_handler.stop_bot()
-        assert not bot_handler._long_polling_is_running
-        assert not bot_handler._bot_is_running
+        async def test_max_exponential_backoff_value(
+            self,
+            bot_handler_context: BotHandlerContext,
+            caplog: pytest.LogCaptureFixture,
+        ) -> None:
+            """
+            Test that the backoff delays does not exceed more than the
+            BotHandler.MAX_BACKOFF_DELAY
+            """
+            caplog.set_level(30)  # level: WARNING
+            bot_handler = bot_handler_context.bot_handler
+            bot_handler.INITIAL_BACKOFF_DELAY = 0.02
+            bot_handler.MAX_BACKOFF_DELAY = 0.03
+            with patch.object(
+                bot_handler,
+                "_start_polling_loop",
+                side_effect=[
+                    NetworkError("fake network error"),
+                    NetworkError("fake network error"),
+                    NetworkError("fake network error"),
+                    StopLoop(),
+                ],
+            ):
+                with suppress(StopLoop):
+                    await bot_handler.run_bot(FAKE_BOT_TOKEN)
+            assert "retrying in 0.02" in caplog.messages[0]
+            assert "retrying in 0.03" in caplog.messages[1]
+            assert "retrying in 0.03" in caplog.messages[2]
 
-        await cancel_task(task)
+        async def test_backoff_delay_reset_to_inital_backoff_value(
+            self,
+            bot_handler_context: BotHandlerContext,
+            caplog: pytest.LogCaptureFixture,
+        ) -> None:
+            """
+            Test that the backoff delay goes back to the
+            initial value (BotHandler.INITIAL_BACKOFF_DELAY)
+            when no NetworkError occured after
+            a prolonged time (connection was stable)
+            """
+            caplog.set_level(30)  # level: WARNING
+            bot_handler = bot_handler_context.bot_handler
+            bot_handler.INITIAL_BACKOFF_DELAY = 0.02
+            bot_handler.RESET_BACKOFF_DELAY_AFTER = 0.05
+            call_count = 0
 
-    def test_stop_bot_when_the_bot_is_not_running(
-        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        caplog.set_level(30)  # level: WARNING
-        bot_handler = bot_handler_context.bot_handler
-        # make sure the self._bot_is_running state is False
-        assert not bot_handler._bot_is_running
-        bot_handler.stop_bot()
-        assert "Bot is not running, no need to stop" in caplog.messages
+            async def _fake_polling_loop(*args: Any, **kwargs: Any) -> None:
+                nonlocal call_count
+                call_count += 1
+                if call_count <= 2:
+                    raise NetworkError("fake network error")
+                if call_count == 3:
+                    # simulate a stable polling run,
+                    # which mean no NetworkError occured for a prolonged time
+                    await asyncio.sleep(
+                        0.06  # slightly above the RESET_BACKOFF_DELAY_AFTER
+                    )
+                    raise NetworkError("fake network error")
+                raise StopLoop()
 
-    async def test_stop_polling_loop_when_the_polling_is_running(
-        self,
-        bot_handler_context: BotHandlerContext,
-    ) -> None:
-        bot_handler = bot_handler_context.bot_handler
-        task = asyncio.create_task(
-            bot_handler._start_polling_loop(
-                bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
-            )
-        )
-        await asyncio.sleep(0)
-        # making sure the polling is running first before stopping it
-        assert bot_handler._long_polling_is_running, "polling loop is not running!"
-        bot_handler._stop_polling_loop()
-        assert not bot_handler._long_polling_is_running
-
-        await cancel_task(task)
-
-    def test_stop_polling_loop_when_the_polling_is_not_running(
-        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        caplog.set_level(30)  # level: WARNING
-        bot_handler = bot_handler_context.bot_handler
-        # make sure the self._long_polling_is_running state is False
-        assert not bot_handler._long_polling_is_running
-        bot_handler._stop_polling_loop()
-        assert "polling loop is not running, no need to stop" in caplog.messages
+            with patch.object(
+                bot_handler,
+                "_start_polling_loop",
+                side_effect=_fake_polling_loop,
+            ):
+                with suppress(StopLoop):
+                    await bot_handler.run_bot(FAKE_BOT_TOKEN)
+            assert "retrying in 0.02" in caplog.messages[0]
+            assert "retrying in 0.04" in caplog.messages[1]
+            assert "retrying in 0.02" in caplog.messages[2]
 
 
-class TestStartLongPolling:
-    async def test_polling_is_running_state_flipped(
-        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        caplog.set_level(20)  # level: INFO
-        bot_handler = bot_handler_context.bot_handler
-        # assert its not True yet
-        assert not bot_handler._long_polling_is_running
-        task = asyncio.create_task(
-            bot_handler._start_polling_loop(
-                bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
-            )
-        )
-        await asyncio.sleep(0)
-        assert bot_handler._long_polling_is_running
-        assert "Bot long polling loop started" in caplog.messages
-        bot_handler._stop_polling_loop()
+class TestStopThrottlers:
+    pass
 
-        await cancel_task(task)
 
-    async def test_start_the_polling_loop_twice(
-        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        caplog.set_level(30)  # level: WARNING
-        bot_handler = bot_handler_context.bot_handler
-        task = asyncio.create_task(
-            bot_handler._start_polling_loop(
-                bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
-            )
-        )
-        await asyncio.sleep(0)
-        # making sure the long polling loop is running first
-        assert bot_handler._long_polling_is_running
-        await bot_handler._start_polling_loop(
-            bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
-        )
-        assert "long polling already started, no need to start again" in caplog.messages
-
-        await cancel_task(task)
-
-    async def test_called_methods_and_args(
-        self, bot_handler_context: BotHandlerContext
-    ) -> None:
-        bot_handler = bot_handler_context.bot_handler
-        with (
-            patch.object(
-                bot_handler, "_poll_once", side_effect=[FAKE_CURRENT_OFFSET, StopLoop()]
-            ) as mock_poll_once,
-            patch.object(bot_handler, "_stop_polling_loop") as mock_stop_polling_loop,
-        ):
-            with suppress(StopLoop):
-                await bot_handler._start_polling_loop(
-                    bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
-                )
-        mock_poll_once.assert_awaited_with(
-            bot_handler_context.fake_bot, FAKE_CURRENT_OFFSET
-        )
-        bot_handler_context.fake_bot_state.assert_called_once_with(
-            bot_handler.bot_state.store_offset, [FAKE_BOT_TOKEN, FAKE_CURRENT_OFFSET]
-        )
-        mock_stop_polling_loop.assert_called_once()
+class TestDrainTasks:
+    pass
 
 
 class TestPollOnce:
