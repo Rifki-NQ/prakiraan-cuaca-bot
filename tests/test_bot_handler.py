@@ -319,7 +319,124 @@ class TestRunBot:
             assert "retrying in 0.02" in caplog.messages[2]
 
 
+class TestStopBot:
+    def test_bot_state_flipped(self, bot_handler_context: BotHandlerContext) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        # first, set the state of bot_handler._bot_is_running to True
+        # because making it True through run_bot() requires
+        # the run_bot() to be called as a Task
+        bot_handler._bot_is_running = True
+        bot_handler.stop_bot()
+        assert not bot_handler._bot_is_running
+
+    def test_stop_bot_twice(
+        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(30)  # level: WARNING
+        bot_handler = bot_handler_context.bot_handler
+        bot_handler._bot_is_running = True
+        bot_handler.stop_bot()
+        bot_handler.stop_bot()  # second call, should logs a warning
+        assert not bot_handler._bot_is_running
+        assert "no need to stop" in caplog.messages[0]
+
+    async def test_run_bot_task_stopped(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        """
+        Test when run_bot() which contains a loop inside it is stopped
+        by stop_bot() when run_bot() runs as a Task
+        """
+        bot_handler = bot_handler_context.bot_handler
+        task = asyncio.create_task(bot_handler.run_bot(FAKE_BOT_TOKEN))
+        await asyncio.sleep(0)
+
+        assert bot_handler._bot_is_running
+        bot_handler.stop_bot()
+        assert not bot_handler._bot_is_running
+
+        await task  # wait for full shutdown
+        await cancel_task(task)
+
+
 class TestStopThrottlers:
+    class FakeError(Exception):
+        """Fake error for testing purpose"""
+
+        pass
+
+    async def test_throttlers_stopped(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        await bot_handler._stop_throttlers()
+        bot_handler_context.fake_global_throttler.assert_called_once(
+            bot_handler.global_throttler.stop_reset_timer
+        )
+
+    async def test_when_stop_reset_timer_raised_error(
+        self,
+        bot_handler_context: BotHandlerContext,
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        with patch.object(
+            bot_handler.global_throttler,
+            "stop_reset_timer",
+            side_effect=self.FakeError("fake error"),
+        ):
+            with pytest.raises(ExceptionGroup) as exc_info:
+                await bot_handler._stop_throttlers()
+        # assert that only one exception was raised as ExceptionGroup
+        assert len(exc_info.value.exceptions) == 1
+        assert isinstance(exc_info.value.exceptions[0], self.FakeError)
+        assert exc_info.value.message == "Errors while stopping the throttlers"
+        assert exc_info.value.exceptions[0].args[0] == "fake error"
+
+    async def test_when_stop_delete_stale_data_cycle_raised_error(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        with patch.object(
+            bot_handler.user_throttler,
+            "stop_delete_stale_data_cycle",
+            side_effect=self.FakeError("fake error"),
+        ):
+            with pytest.raises(ExceptionGroup) as exc_info:
+                await bot_handler._stop_throttlers()
+        # assert that only one exception was raised as ExceptionGroup
+        assert len(exc_info.value.exceptions) == 1
+        assert isinstance(exc_info.value.exceptions[0], self.FakeError)
+        assert exc_info.value.message == "Errors while stopping the throttlers"
+        assert exc_info.value.exceptions[0].args[0] == "fake error"
+
+    async def test_when_both_stop_method_of_throttlers_raised_error(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        fake_error_1 = self.FakeError("fake error stop_reset_timer")
+        fake_error_2 = self.FakeError("fake error stop_delete_stale_data_cycle")
+        with (
+            patch.object(
+                bot_handler.global_throttler,
+                "stop_reset_timer",
+                side_effect=fake_error_1,
+            ),
+            patch.object(
+                bot_handler.user_throttler,
+                "stop_delete_stale_data_cycle",
+                side_effect=fake_error_2,
+            ),
+        ):
+            with pytest.raises(ExceptionGroup) as exc_info:
+                await bot_handler._stop_throttlers()
+        # assert that two exceptions was raised as ExceptionGroup
+        assert len(exc_info.value.exceptions) == 2
+        assert exc_info.value.message == "Errors while stopping the throttlers"
+        assert fake_error_1 in exc_info.value.exceptions
+        assert fake_error_2 in exc_info.value.exceptions
+
+
+class TestStartPollingLoop:
     pass
 
 
@@ -1011,9 +1128,9 @@ class TestHandleTaskCompletion:
             assert isinstance(task_factory.exec, exceptions.BotHandlerError), (
                 "passed exception should be part of BotHandlerError!"
             )
-            with pytest.raises(type(task_factory.exec)) as exec_info:
+            with pytest.raises(type(task_factory.exec)) as exc_info:
                 await task
-        assert exec_info.value.message in caplog.messages[0]
+        assert exc_info.value.message in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
         mock_method.assert_called_once_with(
             bot_handler_context.fake_bot,
@@ -1049,9 +1166,9 @@ class TestHandleTaskCompletion:
             assert isinstance(task_factory.exec, exceptions.BotHandlerError), (
                 "passed exception should be part of BotHandlerError!"
             )
-            with pytest.raises(type(task_factory.exec)) as exec_info:
+            with pytest.raises(type(task_factory.exec)) as exc_info:
                 await task
-        assert exec_info.value.message in caplog.messages[0]
+        assert exc_info.value.message in caplog.messages[0]
         assert "Skip responding to non Chat context" in caplog.messages[1]
         assert "finished with error" in caplog.messages[2]
         mock_method.assert_not_called()
@@ -1213,10 +1330,10 @@ class TestParseUpdate:
         """
         bot_handler = bot_handler_context.bot_handler
         fake_update.message.text = None
-        with pytest.raises(exceptions.EmptyMessageTextError) as exec_info:
+        with pytest.raises(exceptions.EmptyMessageTextError) as exc_info:
             bot_handler._parse_update(update=fake_update)
-        assert exec_info.value.chat_id == FAKE_CHAT_ID
-        assert exec_info.value.message == "This bot can only proceed plain text"
+        assert exc_info.value.chat_id == FAKE_CHAT_ID
+        assert exc_info.value.message == "This bot can only proceed plain text"
 
     @pytest.mark.parametrize("text", ["start", "start value_a", "value_a /start"])
     def test_when_update_message_first_text_is_not_a_command(
@@ -1228,12 +1345,12 @@ class TestParseUpdate:
         """
         bot_handler = bot_handler_context.bot_handler
         fake_update.message.text = text
-        with pytest.raises(exceptions.NotCommandTypeError) as exec_info:
+        with pytest.raises(exceptions.NotCommandTypeError) as exc_info:
             bot_handler._parse_update(update=fake_update)
-        assert exec_info.value.chat_id == FAKE_CHAT_ID
-        assert exec_info.value.text == text.split()[0]
+        assert exc_info.value.chat_id == FAKE_CHAT_ID
+        assert exc_info.value.text == text.split()[0]
         assert (
-            exec_info.value.message
+            exc_info.value.message
             == "First text have to be a command, started with / (a slash)"
         )
 
@@ -1249,12 +1366,12 @@ class TestParseUpdate:
             assert False, (
                 f"{invalid_command} is a valid Commands, when its expected to be invalid"
             )
-        with pytest.raises(exceptions.InvalidCommandError) as exec_info:
+        with pytest.raises(exceptions.InvalidCommandError) as exc_info:
             bot_handler._parse_update(update=fake_update)
-        assert exec_info.value.chat_id == FAKE_CHAT_ID
-        assert exec_info.value.command == invalid_command
+        assert exc_info.value.chat_id == FAKE_CHAT_ID
+        assert exc_info.value.command == invalid_command
         assert (
-            exec_info.value.message
+            exc_info.value.message
             == f"{invalid_command} is not a known command, type /help to see available commands"
         )
 
@@ -1273,10 +1390,10 @@ def test_validate_text_is_not_none_when_passed_text_is_none(
     bot_handler_context: BotHandlerContext,
 ) -> None:
     bot_handler = bot_handler_context.bot_handler
-    with pytest.raises(exceptions.EmptyMessageTextError) as exec_info:
+    with pytest.raises(exceptions.EmptyMessageTextError) as exc_info:
         bot_handler._validate_text_is_not_none(text=None, chat_id=FAKE_CHAT_ID)
-    assert exec_info.value.chat_id == FAKE_CHAT_ID
-    assert exec_info.value.message == "This bot can only proceed plain text"
+    assert exc_info.value.chat_id == FAKE_CHAT_ID
+    assert exc_info.value.message == "This bot can only proceed plain text"
 
 
 def test_validate_first_text_is_command_when_first_text_start_with_slash(
@@ -1293,14 +1410,14 @@ def test_validate_first_text_is_command_when_first_text_does_not_start_with_slas
     bot_handler_context: BotHandlerContext,
 ) -> None:
     bot_handler = bot_handler_context.bot_handler
-    with pytest.raises(exceptions.NotCommandTypeError) as exec_info:
+    with pytest.raises(exceptions.NotCommandTypeError) as exc_info:
         bot_handler._validate_first_text_is_command(
             first_text="fake_command", chat_id=FAKE_CHAT_ID
         )
-    assert exec_info.value.chat_id == FAKE_CHAT_ID
-    assert exec_info.value.text == "fake_command"
+    assert exc_info.value.chat_id == FAKE_CHAT_ID
+    assert exc_info.value.text == "fake_command"
     assert (
-        exec_info.value.message
+        exc_info.value.message
         == "First text have to be a command, started with / (a slash)"
     )
 
@@ -1326,13 +1443,13 @@ def test_validate_command_is_valid_when_passed_command_is_not_valid(
         assert False, (
             f"{invalid_command} is a valid Commands, when its expected to be invalid"
         )
-    with pytest.raises(exceptions.InvalidCommandError) as exec_info:
+    with pytest.raises(exceptions.InvalidCommandError) as exc_info:
         bot_handler._validate_command_is_valid(
             command_text=invalid_command, chat_id=FAKE_CHAT_ID
         )
-    assert exec_info.value.chat_id == FAKE_CHAT_ID
-    assert exec_info.value.command == invalid_command
+    assert exc_info.value.chat_id == FAKE_CHAT_ID
+    assert exc_info.value.command == invalid_command
     assert (
-        exec_info.value.message
+        exc_info.value.message
         == f"{invalid_command} is not a known command, type /help to see available commands"
     )
