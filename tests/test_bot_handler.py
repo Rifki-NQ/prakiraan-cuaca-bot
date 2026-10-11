@@ -49,6 +49,12 @@ class StopLoop(Exception):
     pass
 
 
+class FakeError(Exception):
+    """Fake error for testing purpose"""
+
+    pass
+
+
 async def cancel_task(task: asyncio.Task[Any]) -> None:
     """
     Cancel a task then waits until the cancellation
@@ -242,7 +248,7 @@ class TestRunBot:
                 ],
             ):
                 with suppress(StopLoop):
-                    await bot_handler.run_bot(FAKE_BOT_TOKEN)
+                    await bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN)
             assert "retrying in 0.01" in caplog.messages[0]
             assert "retrying in 0.02" in caplog.messages[1]
             assert "retrying in 0.04" in caplog.messages[2]
@@ -348,7 +354,7 @@ class TestStopBot:
         by stop_bot() when run_bot() runs as a Task
         """
         bot_handler = bot_handler_context.bot_handler
-        task = asyncio.create_task(bot_handler.run_bot(FAKE_BOT_TOKEN))
+        task = asyncio.create_task(bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN))
         await asyncio.sleep(0)
 
         assert bot_handler._bot_is_running
@@ -360,11 +366,6 @@ class TestStopBot:
 
 
 class TestStopThrottlers:
-    class FakeError(Exception):
-        """Fake error for testing purpose"""
-
-        pass
-
     async def test_throttlers_stopped(
         self, bot_handler_context: BotHandlerContext
     ) -> None:
@@ -382,13 +383,13 @@ class TestStopThrottlers:
         with patch.object(
             bot_handler.global_throttler,
             "stop_reset_timer",
-            side_effect=self.FakeError("fake error"),
+            side_effect=FakeError("fake error"),
         ):
             with pytest.raises(ExceptionGroup) as exc_info:
                 await bot_handler._stop_throttlers()
         # assert that only one exception was raised as ExceptionGroup
         assert len(exc_info.value.exceptions) == 1
-        assert isinstance(exc_info.value.exceptions[0], self.FakeError)
+        assert isinstance(exc_info.value.exceptions[0], FakeError)
         assert exc_info.value.message == "Errors while stopping the throttlers"
         assert exc_info.value.exceptions[0].args[0] == "fake error"
 
@@ -399,13 +400,13 @@ class TestStopThrottlers:
         with patch.object(
             bot_handler.user_throttler,
             "stop_delete_stale_data_cycle",
-            side_effect=self.FakeError("fake error"),
+            side_effect=FakeError("fake error"),
         ):
             with pytest.raises(ExceptionGroup) as exc_info:
                 await bot_handler._stop_throttlers()
         # assert that only one exception was raised as ExceptionGroup
         assert len(exc_info.value.exceptions) == 1
-        assert isinstance(exc_info.value.exceptions[0], self.FakeError)
+        assert isinstance(exc_info.value.exceptions[0], FakeError)
         assert exc_info.value.message == "Errors while stopping the throttlers"
         assert exc_info.value.exceptions[0].args[0] == "fake error"
 
@@ -413,8 +414,8 @@ class TestStopThrottlers:
         self, bot_handler_context: BotHandlerContext
     ) -> None:
         bot_handler = bot_handler_context.bot_handler
-        fake_error_1 = self.FakeError("fake error stop_reset_timer")
-        fake_error_2 = self.FakeError("fake error stop_delete_stale_data_cycle")
+        fake_error_1 = FakeError("fake error stop_reset_timer")
+        fake_error_2 = FakeError("fake error stop_delete_stale_data_cycle")
         with (
             patch.object(
                 bot_handler.global_throttler,
@@ -437,11 +438,158 @@ class TestStopThrottlers:
 
 
 class TestStartPollingLoop:
-    pass
+    async def test_called_methods_and_args(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        # modify the bot state so the polling loop can run
+        bot_handler._bot_is_running = True
+
+        async def _flips_bot_running_state(*args: Any, **kwargs: Any) -> None:
+            nonlocal bot_handler
+            bot_handler._bot_is_running = False
+
+        with (
+            patch.object(
+                bot_handler, "_poll_once", wraps=bot_handler._poll_once
+            ) as mock_poll_once,
+            patch.object(bot_handler, "_drain_tasks") as mock_drain_tasks,
+            patch.object(
+                bot_handler.bot_state,
+                "store_offset",
+                side_effect=_flips_bot_running_state,
+            ) as mock_store_offset,
+        ):
+            await bot_handler._start_polling_loop(
+                bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
+            )
+        mock_poll_once.assert_awaited_once_with(
+            bot_handler_context.fake_bot, FAKE_CURRENT_OFFSET
+        )
+        mock_store_offset.assert_awaited_once_with(FAKE_BOT_TOKEN, FAKE_CURRENT_OFFSET)
+        mock_drain_tasks.assert_awaited_once()
+
+    async def test_drain_tasks_still_called_when_poll_once_raised_error(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        bot_handler._bot_is_running = True
+
+        with (
+            patch.object(
+                bot_handler, "_poll_once", side_effect=FakeError("fake error")
+            ),
+            patch.object(bot_handler, "_drain_tasks") as mock_drain_tasks,
+        ):
+            with pytest.raises(FakeError):
+                await bot_handler._start_polling_loop(
+                    bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
+                )
+        mock_drain_tasks.assert_awaited_once()
+
+    async def test_drain_tasks_still_called_when_store_offset_raised_error(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        bot_handler = bot_handler_context.bot_handler
+        bot_handler._bot_is_running = True
+
+        with (
+            patch.object(
+                bot_handler.bot_state,
+                "store_offset",
+                side_effect=FakeError("fake error"),
+            ),
+            patch.object(bot_handler, "_drain_tasks") as mock_drain_tasks,
+        ):
+            with pytest.raises(FakeError):
+                await bot_handler._start_polling_loop(
+                    bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
+                )
+        mock_drain_tasks.assert_awaited_once()
+
+    async def test_when_current_offset_is_none(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        """
+        Test that the passed current_offset to BotHandler._poll_once()
+        is -1 when initial current_offset is None
+        """
+        bot_handler = bot_handler_context.bot_handler
+        bot_handler._bot_is_running = True
+
+        with patch.object(
+            bot_handler, "_poll_once", side_effect=StopLoop()
+        ) as mock_poll_once:
+            with suppress(StopLoop):
+                await bot_handler._start_polling_loop(
+                    bot_token=FAKE_BOT_TOKEN, current_offset=None
+                )
+        mock_poll_once.assert_awaited_once_with(bot_handler_context.fake_bot, -1)
 
 
 class TestDrainTasks:
-    pass
+    async def test_when_there_are_active_tasks(
+        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(10)
+        bot_handler = bot_handler_context.bot_handler
+
+        async def _fake_task() -> None:
+            await asyncio.sleep(0)
+
+        # create 10 fake tasks then add it to self._active_tasks
+        # also add it to the done callback, so the task can discard itself
+        # when they're done
+        for i in range(10):
+            task = asyncio.create_task(_fake_task(), name=f"fake_task-{i}")
+            task.add_done_callback(
+                bot_handler._handle_task_completion(
+                    bot=bot_handler_context.fake_bot, chat_id=FAKE_CHAT_ID
+                )
+            )
+            bot_handler._active_tasks.add(task)
+        await asyncio.sleep(0)
+
+        await bot_handler._drain_tasks()
+        assert "draining active tasks: 10 tasks remained" in caplog.messages
+        assert "active tasks drained" in caplog.messages
+
+    async def test_when_there_is_no_active_tasks(
+        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(10)
+        bot_handler = bot_handler_context.bot_handler
+        # first, assert no active tasks present
+        assert not bot_handler._active_tasks
+        await bot_handler._drain_tasks()
+        assert not any("draining active tasks: " in m for m in caplog.messages)
+        assert "active tasks drained" in caplog.messages
+
+    async def test_when_task_raised_error_while_being_drained(
+        self, bot_handler_context: BotHandlerContext, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """
+        Test that _drain_task() ignores it when any task raised an error
+        while being drained
+        """
+        caplog.set_level(10)
+        bot_handler = bot_handler_context.bot_handler
+
+        async def _fake_error_task() -> None:
+            await asyncio.sleep(0)
+            raise FakeError("fake error")
+
+        task = asyncio.create_task(_fake_error_task(), name="fake_error_task")
+        task.add_done_callback(
+            bot_handler._handle_task_completion(
+                bot=bot_handler_context.fake_bot, chat_id=FAKE_CHAT_ID
+            )
+        )
+        bot_handler._active_tasks.add(task)
+
+        await bot_handler._drain_tasks()
+        assert "draining active tasks: 1 tasks remained" in caplog.messages
+        assert "active tasks drained" in caplog.messages
 
 
 class TestPollOnce:
@@ -905,7 +1053,7 @@ class TestSendMessageWithRetry:
     @pytest.mark.parametrize(
         "raised_error", [BadRequest("fake bad request"), Forbidden("fake forbidden")]
     )
-    async def then_when_non_retryable_error_occured(
+    async def test_when_non_retryable_error_occured(
         self, bot_handler_context: BotHandlerContext, raised_error: TelegramError
     ) -> None:
         bot_handler = bot_handler_context.bot_handler
@@ -927,9 +1075,6 @@ class TestSendMessageWithRetry:
 
 
 class TestHandleTaskCompletion:
-    class FakeException(Exception):
-        """Raised as fake exception for testing purpose"""
-
     class FakeTaskFactory:
         """
         Used to test task callback behaviour of
@@ -937,10 +1082,10 @@ class TestHandleTaskCompletion:
         """
 
         def __init__(
-            self, bot_handler_context: BotHandlerContext, exec: Exception | None
+            self, bot_handler_context: BotHandlerContext, exc: Exception | None
         ) -> None:
             self.bot_handler_context = bot_handler_context
-            self.exec = exec
+            self.exc = exc
 
         def create_successful_task(self) -> asyncio.Task[None]:
             """Create a fake task that sleeps for 0 second then return None"""
@@ -961,16 +1106,16 @@ class TestHandleTaskCompletion:
             self, remove_chat_id_in_callback: bool = False
         ) -> asyncio.Task[None]:
             """Create a fake task that sleeps for 0 second then raise an error"""
-            chat_id = FAKE_CHAT_ID
+            chat_id: int | None = FAKE_CHAT_ID
             if remove_chat_id_in_callback:
                 chat_id = None
 
             async def _error_task() -> None:
-                assert self.exec is not None, (
+                assert self.exc is not None, (
                     "valid indirect param exception is needed to create an error task"
                 )
                 await asyncio.sleep(0)
-                raise self.exec
+                raise self.exc
 
             task = asyncio.create_task(_error_task())
             task.add_done_callback(
@@ -983,17 +1128,21 @@ class TestHandleTaskCompletion:
             return task
 
     @pytest.fixture()
-    def exec(self, request: pytest.FixtureRequest) -> Exception | None:
+    def exc(self, request: pytest.FixtureRequest) -> BaseException | None:
         try:
+            if request.param is not None:
+                assert isinstance(request.param, BaseException), (
+                    "indirect param: 'exc' should be either None or part of BaseException!"
+                )
             return request.param
         except AttributeError:
             return None
 
     @pytest.fixture(autouse=True)
     def task_factory(
-        self, exec: Exception | None, bot_handler_context: BotHandlerContext
+        self, exc: Exception | None, bot_handler_context: BotHandlerContext
     ) -> FakeTaskFactory:
-        return self.FakeTaskFactory(bot_handler_context, exec)
+        return self.FakeTaskFactory(bot_handler_context, exc)
 
     async def test_active_tasks_discarded_when_no_error_was_raised(
         self, bot_handler_context: BotHandlerContext
@@ -1039,7 +1188,7 @@ class TestHandleTaskCompletion:
 
         async def _raise(*args: Any, **kwargs: Any) -> None:
             await asyncio.sleep(0)
-            raise self.FakeException()
+            raise FakeError()
 
         assert len(bot_handler._active_tasks) == 0, (
             "should be zero since no task was added yet"
@@ -1064,7 +1213,7 @@ class TestHandleTaskCompletion:
         for task in bot_handler._active_tasks:
             await cancel_task(task)
 
-    @pytest.mark.parametrize("exec", [None], indirect=True)
+    @pytest.mark.parametrize("exc", [None], indirect=True)
     async def test_callback_when_no_error_was_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -1076,7 +1225,7 @@ class TestHandleTaskCompletion:
         await cancel_task(task)
 
     @pytest.mark.parametrize(
-        "exec",
+        "exc",
         [
             exceptions.SendMessageRetryExhaustedError(
                 chat_id=FAKE_CHAT_ID,
@@ -1103,7 +1252,7 @@ class TestHandleTaskCompletion:
         await cancel_task(task)
 
     @pytest.mark.parametrize(
-        "exec",
+        "exc",
         [
             exceptions.EmptyMessageTextError(FAKE_CHAT_ID),
             exceptions.NoForecastResultError(FAKE_CHAT_ID, FAKE_RESPOND_MESSAGE),
@@ -1125,23 +1274,23 @@ class TestHandleTaskCompletion:
         with patch.object(
             bot_handler, "_create_send_bot_error_message_task"
         ) as mock_method:
-            assert isinstance(task_factory.exec, exceptions.BotHandlerError), (
+            assert isinstance(task_factory.exc, exceptions.BotHandlerError), (
                 "passed exception should be part of BotHandlerError!"
             )
-            with pytest.raises(type(task_factory.exec)) as exc_info:
+            with pytest.raises(type(task_factory.exc)) as exc_info:
                 await task
         assert exc_info.value.message in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
         mock_method.assert_called_once_with(
             bot_handler_context.fake_bot,
             FAKE_CHAT_ID,
-            task_factory.exec.message,
+            task_factory.exc.message,
         )
 
         await cancel_task(task)
 
     @pytest.mark.parametrize(
-        "exec",
+        "exc",
         [
             exceptions.EmptyMessageTextError(FAKE_CHAT_ID),
             exceptions.NoForecastResultError(FAKE_CHAT_ID, FAKE_RESPOND_MESSAGE),
@@ -1163,10 +1312,10 @@ class TestHandleTaskCompletion:
         with patch.object(
             bot_handler, "_create_send_bot_error_message_task"
         ) as mock_method:
-            assert isinstance(task_factory.exec, exceptions.BotHandlerError), (
+            assert isinstance(task_factory.exc, exceptions.BotHandlerError), (
                 "passed exception should be part of BotHandlerError!"
             )
-            with pytest.raises(type(task_factory.exec)) as exc_info:
+            with pytest.raises(type(task_factory.exc)) as exc_info:
                 await task
         assert exc_info.value.message in caplog.messages[0]
         assert "Skip responding to non Chat context" in caplog.messages[1]
@@ -1175,7 +1324,7 @@ class TestHandleTaskCompletion:
 
         await cancel_task(task)
 
-    @pytest.mark.parametrize("exec", [BadRequest("fake bad request")], indirect=True)
+    @pytest.mark.parametrize("exc", [BadRequest("fake bad request")], indirect=True)
     async def test_callback_when_bad_request_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -1188,9 +1337,7 @@ class TestHandleTaskCompletion:
 
         await cancel_task(task)
 
-    @pytest.mark.parametrize(
-        "exec", [NetworkError("fake network error")], indirect=True
-    )
+    @pytest.mark.parametrize("exc", [NetworkError("fake network error")], indirect=True)
     async def test_callback_when_network_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -1203,7 +1350,7 @@ class TestHandleTaskCompletion:
 
         await cancel_task(task)
 
-    @pytest.mark.parametrize("exec", [asyncio.CancelledError()], indirect=True)
+    @pytest.mark.parametrize("exc", [asyncio.CancelledError()], indirect=True)
     async def test_callback_when_cancelled_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -1217,19 +1364,19 @@ class TestHandleTaskCompletion:
         await cancel_task(task)
 
     @pytest.mark.parametrize(
-        "exec", [FakeException(), RuntimeError(), AttributeError()], indirect=True
+        "exc", [FakeError(), RuntimeError(), AttributeError()], indirect=True
     )
     async def test_callback_when_exception_error_raised(
         self, task_factory: FakeTaskFactory, caplog: pytest.LogCaptureFixture
     ) -> None:
         caplog.set_level(10)
         task = task_factory.create_error_task()
-        assert isinstance(task_factory.exec, Exception), (
+        assert isinstance(task_factory.exc, Exception), (
             "passed exception should be part of Exception!"
         )
-        with pytest.raises(type(task_factory.exec)):
+        with pytest.raises(type(task_factory.exc)):
             await task
-        assert f"Unexpected error: {repr(task_factory.exec)}" in caplog.messages[0]
+        assert f"Unexpected error: {repr(task_factory.exc)}" in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
 
         await cancel_task(task)
@@ -1242,7 +1389,7 @@ def test_parse_retry_after_when_passed_arg_is_int_type(
     value = 1
     result = bot_handler._parse_retry_after(value)
     assert isinstance(result, float)
-    assert value == 1
+    assert result == 1
 
 
 @pytest.mark.parametrize(
