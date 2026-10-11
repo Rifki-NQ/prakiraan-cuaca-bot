@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "prakiraan-cuaca-bot"
 version = "0.0.1"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 dependencies = [
     "python-telegram-bot>=22.8",
