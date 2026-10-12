@@ -80,6 +80,8 @@ sqlite+aiosqlite:////absolute/path/to/mydb.db
 
 ## Usage
 
+Make sure your virtual environment is activated (see [Installation](#installation)). It needs to be activated again in every new terminal session, otherwise `run_bot` won't be found.
+
 Start the bot with:
 
 ```bash
