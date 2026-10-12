@@ -11,7 +11,7 @@ class FakeGlobalRespondThrottler:
 
     def start_reset_timer(self) -> None:
         self.called_methods.append(self.start_reset_timer)
-        
+
     async def stop_reset_timer(self) -> None:
         self.called_methods.append(self.stop_reset_timer)
 
@@ -32,7 +32,7 @@ class FakeUserRespondThrottler:
 
     def start_delete_stale_data_cycle(self) -> None:
         self.called_methods.append(self.start_delete_stale_data_cycle)
-        
+
     async def stop_delete_stale_data_cycle(self) -> None:
         self.called_methods.append(self.stop_delete_stale_data_cycle)
 

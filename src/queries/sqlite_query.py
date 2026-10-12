@@ -23,7 +23,7 @@ class LocationFinder:
     def __init__(self) -> None:
         self._local_db: LocalDBContext | None = None
 
-    # to-do: handle when db folder destination not exist yet
+    # TODO: handle when db folder destination does not exist yet
     async def setup_local_db(self, db_url: str) -> None:
         """Must be called once before any other method."""
         if self._local_db is not None:

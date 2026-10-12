@@ -1,156 +1,153 @@
 from src.models.domain_model import BotUserStateModel
 
-"""This module contains all user facing messages"""
+SHOW_INTRO = """Welcome to prakiraan-cuaca-bot!
 
-SHOW_INTRO = """Welcome to prakiraan-cuaca-bot project.
-this is an experimental project made by https://github.com/Rifki-NQ.
-specifically created for learning purpose,
-as the consumer layer of
-https://github.com/Rifki-NQ/indo-weather-etl
-type /help to get help menu"""
+This is an experimental project by https://github.com/Rifki-NQ, built for learning purposes.
+It delivers weather forecasts collected by https://github.com/Rifki-NQ/indo-weather-etl
+
+Type /help to see the available commands."""
 
 
-SHOW_HELP = """Available Commands:
-/start
-    <b>start the bot</b>
-/help
-    <b>show this help message</b>
-/location
-    <b>show your current location</b>
-/input
-    <b>send value to the bot</b>
-/today
-    <b>show today weather forecast</b>
-/tomorrow
-    <b>show tomorrow weather forecast</b>
-/reset
-    <b>reset current location</b>
+SHOW_HELP = """<b>Available commands</b>
+/start - Start the bot
+/help - Show this help message
+/location - Continue your location setup, or show your current location
+/input - Send a value to the bot
+/today - Show today's weather forecast
+/tomorrow - Show tomorrow's weather forecast
+/reset - Clear your location setup and start over
+/revert - Go back one step in your location setup
 
-Extra help commands:
-/help location
-    <b>Show extra help for /location command</b>
-/help input
-    <b>Show extra help for /input command</b>
-/help today
-    <b>Show extra help for /today command</b>
-/help tomorrow
-    <b>Show extra help for /tomorrow command</b>
-/help reset
-    <b>Show extra help for /reset command</b>"""
+<b>Detailed help</b>
+/help location - More about /location
+/help input - More about /input
+/help today - More about /today
+/help tomorrow - More about /tomorrow
+/help reset - More about /reset
+/help revert - More about /revert
+"""
 
 
-SHOW_WELCOME_BACK_INTRO = """Welcome back to prakiraan-cuaca-bot project"""
+SHOW_WELCOME_BACK_INTRO = "Welcome back to prakiraan-cuaca-bot!"
 
 
-ASK_CITY_OR_REGENCY = """Enter your <b>city or regency</b> location
-with /input <b>your city or regency</b>.
+ASK_CITY_OR_REGENCY = """Let's set up your location.
+Send your <b>city or regency</b> with /input <b>your city or regency</b>
 
-<i>example: /input kabupaten bekasi</i>"""
+<i>Example: /input kabupaten bekasi</i>"""
 
 
-TELLS_USER_LOCATION_SETUP_FINISHED = "Location setup finished, no need for /input"
+TELLS_USER_LOCATION_SETUP_FINISHED = (
+    "Your location is already set up, so there's no need to use /input."
+)
 
-TELLS_USER_TO_SET_LOCATION = "Set your location first to get started"
+TELLS_USER_TO_SET_LOCATION = (
+    "Please set your location first. Use /location to get started."
+)
 
-TELLS_USER_TO_FINISH_SET_LOCATION = "Finish your location setup to get started"
+TELLS_USER_TO_FINISH_SET_LOCATION = (
+    "Please finish your location setup first. Use /location to continue."
+)
 
-TELLS_USER_NO_NEED_FOR_RESET = "Failed, no location state to reset"
+TELLS_USER_NO_NEED_FOR_RESET = "There's no location setup to reset."
 
-TELLS_USER_RESET_SUCCESS = "Your location has been reset"
+TELLS_USER_RESET_SUCCESS = (
+    "Your location has been reset. Use /location to set it up again."
+)
 
-TELLS_USER_NO_NEED_FOR_REVERT = "Failed, no location state to revert"
+TELLS_USER_NO_NEED_FOR_REVERT = "There's nothing to revert yet."
 
 
 def notify_to_add_input_value(command: str) -> str:
-    return f"Input value is required for {command} command"
+    return f"The {command} command needs a value. Please add it after the command."
 
 
 def notify_to_not_add_input_value(command: str) -> str:
-    return f"{command} command does not take input value"
+    return f"The {command} command doesn't take a value. Please send it on its own."
 
 
 def show_revert_message(reverted_state: str) -> str:
-    return f"<b>{reverted_state}</b> reverted"
+    return f"<b>{reverted_state}</b> has been removed from your location setup."
 
 
 def notify_city_or_regency_not_found(city_or_regency: str | None) -> str:
-    return f"<b>{city_or_regency}</b> not found, please retry"
+    return f"Sorry, <b>{city_or_regency}</b> wasn't found. Please check the spelling and try again."
 
 
 def notify_to_choose_city_or_regency(city_or_regency_list: str) -> str:
-    return f"""Select your <b>city or regency</b> from the list below
-with /input <b>your city or regency</b>
+    return f"""Choose your <b>city or regency</b> from the list below
+using /input <b>your city or regency</b>
 {city_or_regency_list}
 
-<i>example: /input kabupaten bekasi</i>"""
+<i>Example: /input kabupaten bekasi</i>"""
 
 
 def notify_city_or_regency_updated(city_or_regency: str) -> str:
-    return f"Your <b>city or regency</b> location updated to <b>{city_or_regency}</b>."
+    return f"Your <b>city or regency</b> has been set to <b>{city_or_regency}</b>."
 
 
 def notify_subdistrict_not_found(subdistrict: str | None, subdistrict_list: str) -> str:
-    return f"""<b>{subdistrict}</b> not found, select from the list below
-with /input <b>your city or subdistrict</b>
+    return f"""Sorry, <b>{subdistrict}</b> wasn't found. Please choose from the list below
+using /input <b>your subdistrict</b>
 {subdistrict_list}
 
-<i>example: /input cikarang selatan</i>"""
+<i>Example: /input cikarang selatan</i>"""
 
 
 def notify_subdistrict_updated(subdistrict: str) -> str:
-    return f"Your <b>subdistrict</b> location updated to <b>{subdistrict}</b>."
+    return f"Your <b>subdistrict</b> has been set to <b>{subdistrict}</b>."
 
 
 def notify_to_choose_subdistrict(subdistrict_list: str) -> str:
-    return f"""Select your <b>subdistrict</b> from the list below
-with /input <b>your subdistrict</b>
+    return f"""Choose your <b>subdistrict</b> from the list below
+using /input <b>your subdistrict</b>
 {subdistrict_list}
 
-<i>example: /input cikarang selatan</i>"""
+<i>Example: /input cikarang selatan</i>"""
 
 
 def notify_village_not_found(village: str | None, village_list: str) -> str:
-    return f"""<b>{village}</b> not found, select from the list below
-with /input <b>your village</b>
+    return f"""Sorry, <b>{village}</b> wasn't found. Please choose from the list below
+using /input <b>your village</b>
 {village_list}
 
-<i>example: /input sukamahi</i>
-"""
+<i>Example: /input sukamahi</i>"""
 
 
 def notify_village_updated(village: str) -> str:
-    return f"Your <b>village</b> location updated to <b>{village}</b>."
+    return f"Your <b>village</b> has been set to <b>{village}</b>."
 
 
 def notify_to_choose_village(village_list: str) -> str:
-    return f"""Select your <b>village</b> from the list below
-with /input <b>your village</b>
+    return f"""Choose your <b>village</b> from the list below
+using /input <b>your village</b>
 {village_list}
 
-<i>example: /input sukamahi</i>
-"""
+<i>Example: /input sukamahi</i>"""
 
 
 def notify_location_updated(user_state: BotUserStateModel, adm4_code: str) -> str:
-    return f"""Your location address updated!
-city or regency: <b>{user_state.kabupaten_atau_kota}</b>
-subdistrict: <b>{user_state.kecamatan}</b>
-village: <b>{user_state.desa_atau_kelurahan}</b>
-adm4_code of the address: <b>{adm4_code}</b>"""
+    return f"""Your location has been saved!
+
+City or regency: <b>{user_state.kabupaten_atau_kota}</b>
+Subdistrict: <b>{user_state.kecamatan}</b>
+Village: <b>{user_state.desa_atau_kelurahan}</b>
+Area code (ADM4): <b>{adm4_code}</b>"""
 
 
 def show_user_full_address(
     city_or_regency: str, subdistrict: str, village: str, adm4_code: str
 ) -> str:
-    return f"""-- Your location address --
-city or regency: <b>{city_or_regency}</b>
-subdistrict: <b>{subdistrict}</b>
-village: <b>{village}</b>
-adm4_code of the address: <b>{adm4_code}</b>"""
+    return f"""📍 <b>Your location</b>
+
+City or regency: <b>{city_or_regency}</b>
+Subdistrict: <b>{subdistrict}</b>
+Village: <b>{village}</b>
+Area code (ADM4): <b>{adm4_code}</b>"""
 
 
 def forecasts_message_header(adm4_code: str, date: str) -> str:
-    return f"📍 <b>Forecast for {adm4_code}</b>\n🗓 As of {date}\n"
+    return f"📍 <b>Forecast for area {adm4_code}</b>\n🗓 As of {date}\n"
 
 
 # see the params name detail in src/models/domain_model.ForecastModel
@@ -167,9 +164,9 @@ def format_one_forecast(
     return (
         f"⏰ <b>{forecast_time}</b>\n"
         f"   {weat_desc}\n"
-        f"🌡 Temp: {temp}°C\n"
+        f"🌡 Temperature: {temp}°C\n"
         f"💧 Humidity: {humidity}%\n"
-        f"☁️ Cloud Cover: {ttc}%\n"
+        f"☁️ Cloud cover: {ttc}%\n"
         f"🌧 Precipitation: {tp} mm\n"
         f"💨 Wind: {ws} km/h\n"
         f"👁 Visibility: {visibility} m\n"
@@ -179,52 +176,41 @@ def format_one_forecast(
 def no_forecast_result_error_message(
     adm4_code: str, start_dt: str | None, end_dt: str | None
 ) -> str:
-    return f"""Error: weather forecast not found for <b>{adm4_code}</b>
-datetime range: {start_dt} to {end_dt}"""
+    return f"""Sorry, no forecast is available for area <b>{adm4_code}</b>
+between {start_dt} and {end_dt}. Please try again later."""
 
 
 def show_invalid_extra_help_value_message(help_value: str) -> str:
-    return f"<b>/help {help_value}</b> is not a known extra help"
+    return f"Sorry, there's no detailed help for <b>{help_value}</b>. Type /help to see the available topics."
 
 
 SHOW_LOCATION_COMMAND_HELP = """<b>/location</b>
-Continue location setup,
-if they have finished the setup,
-this command will show
-their current location instead"""
+Continues your location setup.
+If your setup is already finished, it shows your current location instead."""
 
 
 SHOW_INPUT_COMMAND_HELP = """<b>/input value</b>
-Send an input to the bot,
-as of now, this is only used in location setup
-to send the location name to the bot"""
+Sends a value to the bot.
+Right now it's only used during location setup, to enter your city or regency, subdistrict, and village."""
 
 
 SHOW_TODAY_COMMAND_HELP = """<b>/today</b>
-Get today weather forecast,
-user can only use this if they have finished
-the location setup"""
+Shows today's weather forecast.
+Available once your location setup is finished."""
 
 
 SHOW_TOMORROW_COMMAND_HELP = """<b>/tomorrow</b>
-Get tomorrow weather forecast,
-user can only use this if they have finished
-the location setup"""
+Shows tomorrow's weather forecast.
+Available once your location setup is finished."""
 
 
 SHOW_RESET_COMMAND_HELP = """<b>/reset</b>
-Reset current location,
-this can only be used when you
-have initiated the location setup.
-Use /revert if you want
-to revert the location state
-by one level"""
+Clears your whole location setup so you can start over.
+Only available while your setup is in progress.
+To go back just one step instead, use /revert."""
 
 
 SHOW_REVERT_COMMAND_HELP = """<b>/revert</b>
-Revert current location state by one level,
-this can only be used when you
-have initiated the location setup.
-Use /reset if you want to revert
-all of the location state at once
-"""
+Goes back one step in your location setup (for example, from village back to subdistrict).
+Only available while your setup is in progress.
+To start over completely, use /reset."""
