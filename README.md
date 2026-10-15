@@ -4,6 +4,29 @@ A Telegram bot that provides BMKG weather forecasts for areas in Jawa Barat. It 
 
 ---
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Environment Variables](#environment-variables)
+  - [Required](#required)
+  - [Optional (for testing)](#optional-for-testing)
+  - [Connection string format](#connection-string-format)
+- [Usage](#usage)
+- [Commands](#commands)
+- [Testing](#testing)
+  - [Full test run](#full-test-run)
+  - [Unit tests only](#unit-tests-only)
+  - [Integration tests only](#integration-tests-only)
+  - [Production database tests](#production-database-tests)
+- [Architecture Overview](#architecture-overview)
+  - [Request flow](#request-flow)
+  - [Query layer](#query-layer)
+  - [Service layer](#service-layer)
+  - [Bot layer](#bot-layer)
+  - [Models layer](#models-layer)
+
+---
+
 ## Installation
 
 Requires Python 3.11 or newer.
@@ -179,6 +202,8 @@ pytest -m prod_db
 ## Architecture Overview
 
 The project is split into four layers: query, service, bot, and models.
+
+![project_structure.png](project_structure.png)
 
 ### Request flow
 
