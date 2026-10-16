@@ -1,6 +1,7 @@
-from src.models.enums import Commands, BotAction, UserLocationState
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
+
+from src.models.enums import BotAction, Commands, UserLocationState
 
 
 @dataclass
@@ -9,16 +10,16 @@ class ForecastModel:
     analysis_datetime: datetime  # datetime for the forecast analysis
     adm4_code: str  # district level four code, the forecast location
     temperature: int  # temperature in celcius
-    total_cloud_coverage: int  # percentage unit
-    total_precipitation: float  # mm unit
-    weather_description: str
-    weather_description_eng: str
-    wind_direction_degree: int
-    wind_direction_compass: str  # direction from
-    wind_direction_compass_to: str  # direction to
-    wind_speed: float  # km/h unit
-    humidity: int  # percentage
-    visibility: int  # meters unit
+    total_cloud_coverage: int | None  # percentage unit
+    total_precipitation: float | None  # mm unit
+    weather_description: str | None
+    weather_description_eng: str | None
+    wind_direction_degree: int | None
+    wind_direction_compass: str | None  # direction from
+    wind_direction_compass_to: str | None  # direction to
+    wind_speed: float | None  # km/h unit
+    humidity: int | None  # percentage
+    visibility: int | None  # meters unit
     updated_at: datetime  # datetime for the forecast last update
     created_at: datetime  # datetime for the forecast creation
 

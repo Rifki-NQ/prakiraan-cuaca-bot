@@ -1,9 +1,11 @@
-import pytest
-from itertools import product
 from enum import Enum
+from itertools import product
+
+import pytest
+
 from src.bot.bot_router import route_command
-from src.models.enums import Commands, UserLocationState, BotAction
 from src.exceptions import ActionRegistryLookupError
+from src.models.enums import BotAction, Commands, UserLocationState
 
 ALL_COMBINATIONS = product(
     [c for c in Commands], [state for state in UserLocationState], ["input_value", None]

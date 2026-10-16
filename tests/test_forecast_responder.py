@@ -1,12 +1,13 @@
-import pytest
 from unittest.mock import patch
-from tests.mock_class.mock_bot_service import MockBotService
-from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
+
+import pytest
+
 from src.bot.forecast_responder import get_merged_forecasts
+from src.exceptions import EmptyQueryResultError, NoForecastResultError
 from src.models.domain_model import BotUserModel
 from src.models.protocols import BotServiceProtocol
-from src.exceptions import EmptyQueryResultError, NoForecastResultError
-
+from tests.mock_class.mock_bot_service import MockBotService
+from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
 
 TEST_USER_MODEL = BotUserModel(chat_id=1, username=None, adm4_code="1234")
 
@@ -24,7 +25,7 @@ async def test_get_merged_forecast_return_with_header_added(
         user_data=TEST_USER_MODEL,
         get_forecast_service=bot_service.get_today_weather_forecast,
     )
-    assert f"Forecast for {TEST_USER_MODEL.adm4_code}" in result
+    assert f"Forecast for area {TEST_USER_MODEL.adm4_code}" in result
     assert "As of 15 August 2026" in result
 
 

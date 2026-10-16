@@ -1,21 +1,22 @@
-import os
+import argparse
 import asyncio
 import logging
+import os
 import time
 from logging.handlers import RotatingFileHandler
-import argparse
-from dotenv import load_dotenv
 from pathlib import Path
-from src.queries.etl_query import ETLQuery
-from src.queries.bot_query import BotQuery
-from src.queries.sqlite_query import LocationFinder
-from src.service import BotService
+
+from dotenv import load_dotenv
+
+from src.bot.bot_handler import BotHandler
+from src.bot.bot_respond_handler import BotRespondHandler
 from src.bot.bot_respond_throttler import GlobalRespondThrottler, UserRespondThrottler
 from src.bot.bot_state_handler import BotStateHandler
 from src.bot.location_flow_handler import LocationFlowHandler
-from src.bot.bot_respond_handler import BotRespondHandler
-from src.bot.bot_handler import BotHandler
-
+from src.queries.bot_query import BotQuery
+from src.queries.etl_query import ETLQuery
+from src.queries.sqlite_query import LocationFinder
+from src.service import BotService
 
 logger = logging.getLogger(__name__)
 

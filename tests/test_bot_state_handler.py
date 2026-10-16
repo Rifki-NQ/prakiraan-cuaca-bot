@@ -1,6 +1,8 @@
-import pytest
 from datetime import datetime
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+
 from src.bot.bot_state_handler import BotStateHandler
 
 

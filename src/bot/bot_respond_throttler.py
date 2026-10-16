@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import time
-from src.exceptions import BotThrottlerError
 
+from src.exceptions import BotThrottlerError
 
 logger = logging.getLogger(__name__)
 

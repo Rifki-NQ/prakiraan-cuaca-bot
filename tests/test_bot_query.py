@@ -1,23 +1,24 @@
+from collections.abc import AsyncGenerator
+from datetime import datetime
+from unittest.mock import patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import patch
-from collections.abc import AsyncGenerator
 from dotenv import load_dotenv
-from datetime import datetime
 from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from tests.tests_db import BotTestDB
+
+from src.exceptions import DBNotInitializedError
+from src.main import get_env
+from src.models.domain_model import BotUserModel, BotUserStateModel
+from src.queries.bot_query import BotQuery
 from tests.mock_data.mock_db_data import (
     MOCK_BOT_OFFSET_DATA,
     MOCK_BOT_USER_DATA,
     MOCK_BOT_USER_STATE_DATA,
 )
+from tests.tests_db import BotTestDB
 from tests.tests_utils import drop_all_tables, get_tables_name
-from src.main import get_env
-from src.queries.bot_query import BotQuery
-from src.models.domain_model import BotUserModel, BotUserStateModel
-from src.exceptions import DBNotInitializedError
-
 
 pytestmark = pytest.mark.integration
 

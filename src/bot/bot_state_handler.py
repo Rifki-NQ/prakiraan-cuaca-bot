@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
-from src.models.protocols import BotQueryProtocol
 
+from src.models.protocols import BotQueryProtocol
 
 logger = logging.getLogger(__name__)
 

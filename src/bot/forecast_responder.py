@@ -1,9 +1,10 @@
 import logging
-from collections.abc import Callable, AsyncIterable
-from src.models.domain_model import ForecastModel, BotUserModel
+from collections.abc import AsyncIterable, Callable
+
 from src.bot import message_container
 from src.bot.bot_utils import get_user_data_or_raise, merge_messages
 from src.exceptions import EmptyQueryResultError, NoForecastResultError
+from src.models.domain_model import BotUserModel, ForecastModel
 
 logger = logging.getLogger(__name__)
 

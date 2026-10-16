@@ -1,27 +1,28 @@
+from collections.abc import AsyncGenerator, AsyncIterable
+from datetime import datetime
+from unittest.mock import patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import patch
-from collections.abc import AsyncGenerator, AsyncIterable
 from dotenv import load_dotenv
-from datetime import datetime
 from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from tests.tests_db import ETLTestDB
-from tests.tests_utils import drop_all_tables, get_tables_name
-from tests.mock_data.mock_db_data import (
-    MOCK_WEATHER_FORECAST_DATA,
-    MOCK_FORECAST_LOCATION_DATA,
-    MOCK_ETL_DATA_INFO,
-)
-from src.main import get_env
-from src.queries.etl_query import ETLQuery
-from src.models.contexts import ETLDBContext
+
 from src.exceptions import (
-    InvalidDatetimeRangeError,
     DBNotInitializedError,
     EmptyQueryResultError,
+    InvalidDatetimeRangeError,
 )
-
+from src.main import get_env
+from src.models.contexts import ETLDBContext
+from src.queries.etl_query import ETLQuery
+from tests.mock_data.mock_db_data import (
+    MOCK_ETL_DATA_INFO,
+    MOCK_FORECAST_LOCATION_DATA,
+    MOCK_WEATHER_FORECAST_DATA,
+)
+from tests.tests_db import ETLTestDB
+from tests.tests_utils import drop_all_tables, get_tables_name
 
 pytestmark = pytest.mark.integration
 

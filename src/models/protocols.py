@@ -1,17 +1,19 @@
-from typing import Protocol, Any
 from collections.abc import AsyncIterable
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Protocol
+
 from sqlalchemy import Row
+
+from src.models.contexts import BotUserStateContext
 from src.models.domain_model import (
-    ForecastModel,
     BotUserModel,
     BotUserStateModel,
+    ForecastModel,
     LocationFlowResult,
     LocationFlowResultComplete,
 )
 from src.models.enums import Commands
-from src.models.contexts import BotUserStateContext
 
 
 class ETLQueryProtocol(Protocol):

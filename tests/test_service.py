@@ -1,23 +1,24 @@
-import pytest
-from unittest.mock import AsyncMock, Mock
 from collections.abc import AsyncIterable
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+
+from src.models.contexts import BotUserStateContext
 from src.models.domain_model import (
     BotUserModel,
     BotUserStateModel,
     DatetimeModel,
     ForecastModel,
 )
-from src.models.contexts import BotUserStateContext
 from src.models.enums import UserLocationState
 from src.service import BotService
 from tests.mock_class.mock_etl_query import MockETLQuery
+from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
 from tests.mock_data.mock_row_data import (
     MOCK_BOT_QUERY_GET_USER_MAPPED,
     MOCK_BOT_QUERY_GET_USER_STATE_MAPPED,
 )
-from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
-
 
 # this test module does not test BotService.create_or_update_user
 # and BotService.create_or_update_user_state

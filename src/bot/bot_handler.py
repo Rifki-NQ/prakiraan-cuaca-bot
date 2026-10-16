@@ -1,18 +1,12 @@
 import asyncio
 import logging
-from collections.abc import Callable
 import time
+from collections.abc import Callable
 from datetime import timedelta
+
 from telegram import Bot, Update
-from telegram.error import TimedOut, RetryAfter, BadRequest, NetworkError
-from src.models.enums import Commands
-from src.models.contexts import BotUpdateContext
-from src.models.protocols import (
-    BotRespondHandlerProtocol,
-    BotStateHandlerProtocol,
-    GlobalRespondThrottlerProtocol,
-    UserRespondThrottlerProtocol,
-)
+from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
+
 from src.exceptions import (
     BotHandlerError,
     EmptyMessageTextError,
@@ -20,7 +14,14 @@ from src.exceptions import (
     NotCommandTypeError,
     SendMessageRetryExhaustedError,
 )
-
+from src.models.contexts import BotUpdateContext
+from src.models.enums import Commands
+from src.models.protocols import (
+    BotRespondHandlerProtocol,
+    BotStateHandlerProtocol,
+    GlobalRespondThrottlerProtocol,
+    UserRespondThrottlerProtocol,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,13 +257,13 @@ class BotHandler:
                 else:
                     self._create_send_bot_error_message_task(bot, chat_id, e.message)
             except BadRequest as e:
-                logger.error(f"Bad request: chat_id: {chat_id}, error: {repr(e)}")
+                logger.error(f"Bad request: chat_id: {chat_id}, error: {e!r}")
             except NetworkError as e:
-                logger.error(f"Network error: chat_id: {chat_id}, error: {repr(e)}")
+                logger.error(f"Network error: chat_id: {chat_id}, error: {e!r}")
             except asyncio.CancelledError:
                 logger.error("Task was cancelled")
             except Exception as e:
-                logger.error(f"Unexpected error: {repr(e)}", exc_info=e)
+                logger.error(f"Unexpected error: {e!r}", exc_info=e)
             else:
                 logger.debug(f"Task: {task.get_name()} finished successfully")
                 return

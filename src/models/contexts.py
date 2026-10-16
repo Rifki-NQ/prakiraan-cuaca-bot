@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+
 from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import AsyncEngine
-from src.models.enums import Commands, UserLocationState
+
 from src.models.domain_model import BotUserStateModel
+from src.models.enums import Commands, UserLocationState
 
 
 @dataclass

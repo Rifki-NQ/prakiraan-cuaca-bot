@@ -1,34 +1,36 @@
 # pyright: reportPrivateUsage=false
-import os
-import pytest
-from unittest.mock import patch, Mock, DEFAULT
 import asyncio
-from types import TracebackType
-from typing import Optional, Any, Self, cast
+import os
+import time
 from collections.abc import Iterable
 from contextlib import suppress
-import time
-from datetime import timedelta
 from dataclasses import dataclass
+from datetime import timedelta
+from types import TracebackType
+from typing import Any, Self, cast
+from unittest.mock import DEFAULT, Mock, patch
+
+import pytest
 from telegram import Bot, Update
 from telegram.error import (
-    TelegramError,
-    NetworkError,
-    Forbidden,
     BadRequest,
-    TimedOut,
+    Forbidden,
+    NetworkError,
     RetryAfter,
+    TelegramError,
+    TimedOut,
 )
+
+from src import exceptions
+from src.bot.bot_handler import BotHandler
+from src.models.contexts import BotUpdateContext
+from src.models.enums import Commands
 from tests.mock_class.mock_bot_respond_handler import FakeBotRespondHandler
-from tests.mock_class.mock_bot_state_handler import FakeBotStateHandler
 from tests.mock_class.mock_bot_respond_throttler import (
     FakeGlobalRespondThrottler,
     FakeUserRespondThrottler,
 )
-from src.bot.bot_handler import BotHandler
-from src.models.contexts import BotUpdateContext
-from src.models.enums import Commands
-from src import exceptions
+from tests.mock_class.mock_bot_state_handler import FakeBotStateHandler
 
 os.environ["PTB_TIMEDELTA"] = "1"  # avoid PTBDeprecationWarning
 
@@ -46,13 +48,9 @@ FAKE_RETRY_ATTEMPT = 5
 class StopLoop(Exception):
     """Raised to stop an infinite loop in this test module"""
 
-    pass
-
 
 class FakeError(Exception):
     """Fake error for testing purpose"""
-
-    pass
 
 
 async def cancel_task(task: asyncio.Task[Any]) -> None:
@@ -74,12 +72,11 @@ class FakeTelegramBot:
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[Exception]],
-        exc: Optional[Exception],
-        tzb: Optional[TracebackType],
+        exc_type: type[Exception] | None,
+        exc: Exception | None,
+        tzb: TracebackType | None,
     ) -> None:
         """Mock the bot context manager"""
-        pass
 
     async def get_updates(self, offset: Any, timeout: Any) -> tuple[Update, ...]:
         """
@@ -215,15 +212,17 @@ class TestRunBot:
         caplog.set_level(30)  # level: WARNING
         bot_handler = bot_handler_context.bot_handler
         bot_handler.INITIAL_BACKOFF_DELAY = 0
-        with patch.object(
-            bot_handler,
-            "_start_polling_loop",
-            side_effect=[network_exception, StopLoop()],
+        with (
+            patch.object(
+                bot_handler,
+                "_start_polling_loop",
+                side_effect=[network_exception, StopLoop()],
+            ),
+            suppress(StopLoop),
         ):
-            with suppress(StopLoop):
-                await bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN)
+            await bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN)
         assert (
-            f"Network error occurred: {repr(network_exception)}, retrying in"
+            f"Network error occurred: {network_exception!r}, retrying in"
             in caplog.messages[0]
         )
 
@@ -237,18 +236,20 @@ class TestRunBot:
             caplog.set_level(30)  # level: WARNING
             bot_handler = bot_handler_context.bot_handler
             bot_handler.INITIAL_BACKOFF_DELAY = 0.01
-            with patch.object(
-                bot_handler,
-                "_start_polling_loop",
-                side_effect=[
-                    NetworkError("fake network error"),
-                    NetworkError("fake network error"),
-                    NetworkError("fake network error"),
-                    StopLoop(),
-                ],
+            with (
+                patch.object(
+                    bot_handler,
+                    "_start_polling_loop",
+                    side_effect=[
+                        NetworkError("fake network error"),
+                        NetworkError("fake network error"),
+                        NetworkError("fake network error"),
+                        StopLoop(),
+                    ],
+                ),
+                suppress(StopLoop),
             ):
-                with suppress(StopLoop):
-                    await bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN)
+                await bot_handler.run_bot(bot_token=FAKE_BOT_TOKEN)
             assert "retrying in 0.01" in caplog.messages[0]
             assert "retrying in 0.02" in caplog.messages[1]
             assert "retrying in 0.04" in caplog.messages[2]
@@ -266,18 +267,20 @@ class TestRunBot:
             bot_handler = bot_handler_context.bot_handler
             bot_handler.INITIAL_BACKOFF_DELAY = 0.02
             bot_handler.MAX_BACKOFF_DELAY = 0.03
-            with patch.object(
-                bot_handler,
-                "_start_polling_loop",
-                side_effect=[
-                    NetworkError("fake network error"),
-                    NetworkError("fake network error"),
-                    NetworkError("fake network error"),
-                    StopLoop(),
-                ],
+            with (
+                patch.object(
+                    bot_handler,
+                    "_start_polling_loop",
+                    side_effect=[
+                        NetworkError("fake network error"),
+                        NetworkError("fake network error"),
+                        NetworkError("fake network error"),
+                        StopLoop(),
+                    ],
+                ),
+                suppress(StopLoop),
             ):
-                with suppress(StopLoop):
-                    await bot_handler.run_bot(FAKE_BOT_TOKEN)
+                await bot_handler.run_bot(FAKE_BOT_TOKEN)
             assert "retrying in 0.02" in caplog.messages[0]
             assert "retrying in 0.03" in caplog.messages[1]
             assert "retrying in 0.03" in caplog.messages[2]
@@ -313,13 +316,15 @@ class TestRunBot:
                     raise NetworkError("fake network error")
                 raise StopLoop()
 
-            with patch.object(
-                bot_handler,
-                "_start_polling_loop",
-                side_effect=_fake_polling_loop,
+            with (
+                patch.object(
+                    bot_handler,
+                    "_start_polling_loop",
+                    side_effect=_fake_polling_loop,
+                ),
+                suppress(StopLoop),
             ):
-                with suppress(StopLoop):
-                    await bot_handler.run_bot(FAKE_BOT_TOKEN)
+                await bot_handler.run_bot(FAKE_BOT_TOKEN)
             assert "retrying in 0.02" in caplog.messages[0]
             assert "retrying in 0.04" in caplog.messages[1]
             assert "retrying in 0.02" in caplog.messages[2]
@@ -380,13 +385,15 @@ class TestStopThrottlers:
         bot_handler_context: BotHandlerContext,
     ) -> None:
         bot_handler = bot_handler_context.bot_handler
-        with patch.object(
-            bot_handler.global_throttler,
-            "stop_reset_timer",
-            side_effect=FakeError("fake error"),
+        with (
+            patch.object(
+                bot_handler.global_throttler,
+                "stop_reset_timer",
+                side_effect=FakeError("fake error"),
+            ),
+            pytest.raises(ExceptionGroup) as exc_info,
         ):
-            with pytest.raises(ExceptionGroup) as exc_info:
-                await bot_handler._stop_throttlers()
+            await bot_handler._stop_throttlers()
         # assert that only one exception was raised as ExceptionGroup
         assert len(exc_info.value.exceptions) == 1
         assert isinstance(exc_info.value.exceptions[0], FakeError)
@@ -397,13 +404,15 @@ class TestStopThrottlers:
         self, bot_handler_context: BotHandlerContext
     ) -> None:
         bot_handler = bot_handler_context.bot_handler
-        with patch.object(
-            bot_handler.user_throttler,
-            "stop_delete_stale_data_cycle",
-            side_effect=FakeError("fake error"),
+        with (
+            patch.object(
+                bot_handler.user_throttler,
+                "stop_delete_stale_data_cycle",
+                side_effect=FakeError("fake error"),
+            ),
+            pytest.raises(ExceptionGroup) as exc_info,
         ):
-            with pytest.raises(ExceptionGroup) as exc_info:
-                await bot_handler._stop_throttlers()
+            await bot_handler._stop_throttlers()
         # assert that only one exception was raised as ExceptionGroup
         assert len(exc_info.value.exceptions) == 1
         assert isinstance(exc_info.value.exceptions[0], FakeError)
@@ -427,9 +436,9 @@ class TestStopThrottlers:
                 "stop_delete_stale_data_cycle",
                 side_effect=fake_error_2,
             ),
+            pytest.raises(ExceptionGroup) as exc_info,
         ):
-            with pytest.raises(ExceptionGroup) as exc_info:
-                await bot_handler._stop_throttlers()
+            await bot_handler._stop_throttlers()
         # assert that two exceptions was raised as ExceptionGroup
         assert len(exc_info.value.exceptions) == 2
         assert exc_info.value.message == "Errors while stopping the throttlers"
@@ -517,13 +526,15 @@ class TestStartPollingLoop:
         bot_handler = bot_handler_context.bot_handler
         bot_handler._bot_is_running = True
 
-        with patch.object(
-            bot_handler, "_poll_once", side_effect=StopLoop()
-        ) as mock_poll_once:
-            with suppress(StopLoop):
-                await bot_handler._start_polling_loop(
-                    bot_token=FAKE_BOT_TOKEN, current_offset=None
-                )
+        with (
+            patch.object(
+                bot_handler, "_poll_once", side_effect=StopLoop()
+            ) as mock_poll_once,
+            suppress(StopLoop),
+        ):
+            await bot_handler._start_polling_loop(
+                bot_token=FAKE_BOT_TOKEN, current_offset=None
+            )
         mock_poll_once.assert_awaited_once_with(bot_handler_context.fake_bot, -1)
 
 
@@ -1057,15 +1068,17 @@ class TestSendMessageWithRetry:
         self, bot_handler_context: BotHandlerContext, raised_error: TelegramError
     ) -> None:
         bot_handler = bot_handler_context.bot_handler
-        with patch.object(
-            bot_handler_context.fake_bot, "send_message", side_effect=raised_error
-        ) as mock_method:
-            with pytest.raises(type(raised_error)):
-                await bot_handler._send_message_with_retry(
-                    bot=bot_handler_context.fake_bot,
-                    chat_id=FAKE_CHAT_ID,
-                    message=FAKE_RESPOND_MESSAGE,
-                )
+        with (
+            patch.object(
+                bot_handler_context.fake_bot, "send_message", side_effect=raised_error
+            ) as mock_method,
+            pytest.raises(type(raised_error)),
+        ):
+            await bot_handler._send_message_with_retry(
+                bot=bot_handler_context.fake_bot,
+                chat_id=FAKE_CHAT_ID,
+                message=FAKE_RESPOND_MESSAGE,
+            )
         mock_method.assert_awaited_once_with(
             FAKE_CHAT_ID,
             FAKE_RESPOND_MESSAGE,
@@ -1376,7 +1389,7 @@ class TestHandleTaskCompletion:
         )
         with pytest.raises(type(task_factory.exc)):
             await task
-        assert f"Unexpected error: {repr(task_factory.exc)}" in caplog.messages[0]
+        assert f"Unexpected error: {task_factory.exc!r}" in caplog.messages[0]
         assert "finished with error" in caplog.messages[1]
 
         await cancel_task(task)

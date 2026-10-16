@@ -1,11 +1,13 @@
 # pyright: reportPrivateUsage=false
-import pytest
-import pytest_asyncio
-from unittest.mock import patch
 import asyncio
-from collections.abc import AsyncGenerator
 import contextlib
 import time
+from collections.abc import AsyncGenerator
+from unittest.mock import patch
+
+import pytest
+import pytest_asyncio
+
 from src.bot.bot_respond_throttler import GlobalRespondThrottler
 from src.exceptions import BotThrottlerError
 

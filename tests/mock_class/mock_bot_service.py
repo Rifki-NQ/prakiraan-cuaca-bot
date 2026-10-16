@@ -1,12 +1,12 @@
 import asyncio
-from typing import Any
-from collections.abc import AsyncIterable
 import logging
+from collections.abc import AsyncIterable
 from datetime import datetime
-from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
-from src.models.contexts import BotUserStateContext
-from src.models.domain_model import ForecastModel, BotUserModel, BotUserStateModel
+from typing import Any
 
+from src.models.contexts import BotUserStateContext
+from src.models.domain_model import BotUserModel, BotUserStateModel, ForecastModel
+from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
 
 logger = logging.getLogger(__name__)
 

@@ -1,10 +1,10 @@
+from src.exceptions import DataIntegrityError
 from src.models.domain_model import (
     BotUserModel,
     BotUserStateModel,
     LocationFlowResult,
     LocationFlowResultComplete,
 )
-from src.exceptions import DataIntegrityError
 
 FAKE_BOT_USER_STATE = BotUserStateModel(chat_id=1)
 

@@ -1,12 +1,13 @@
 import pytest
-from src.main import logger  # borrow a logger from src.main
+
 from src.bot.bot_utils import (
-    raise_data_integrity_error,
     get_user_data_or_raise,
     merge_messages,
+    raise_data_integrity_error,
 )
-from src.models.domain_model import BotUserModel
 from src.exceptions import DataIntegrityError
+from src.main import logger  # borrow a logger from src.main
+from src.models.domain_model import BotUserModel
 
 
 def test_raise_data_integrity_error() -> None:

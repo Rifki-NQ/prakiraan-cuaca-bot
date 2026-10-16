@@ -1,8 +1,10 @@
-from typing import Any, Mapping, cast
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, cast
+
 from sqlalchemy import Row
+
 from tests.mock_data.mock_db_data import MOCK_WEATHER_FORECAST_DATA
 
 

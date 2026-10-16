@@ -4,13 +4,9 @@ from datetime import datetime
 class DomainError(Exception):
     """Base class for all domain/business error"""
 
-    pass
-
 
 class QueryError(DomainError):
     """Base class for all query related error"""
-
-    pass
 
 
 class BotHandlerError(DomainError):
@@ -35,7 +31,7 @@ class ActionRegistryLookupError(DomainError):
         self.has_input_value = has_input_value
         super().__init__(
             "Error: no BotAction registered for this combination"
-            f" (command: {command}, user_state: {user_state}, has_input_value: {str(has_input_value)})"
+            f" (command: {command}, user_state: {user_state}, has_input_value: {has_input_value!s})"
         )
 
 

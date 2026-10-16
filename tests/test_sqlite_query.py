@@ -1,15 +1,17 @@
-import pytest
-import pytest_asyncio
 import csv
 import logging
 from collections.abc import AsyncGenerator
-from sqlalchemy import inspect, select, func, Connection, Table
+
+import pytest
+import pytest_asyncio
+from sqlalchemy import Connection, Table, func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncEngine
-from tests.paths import temp_local_db_path, adm4_codes_csv_path
-from tests.tests_utils import get_tables_name
-from src.queries.sqlite_query import LocationFinder
+
+from src.exceptions import DBNotInitializedError, EmptyQueryResultError
 from src.models.contexts import LocalDBContext
-from src.exceptions import EmptyQueryResultError, DBNotInitializedError
+from src.queries.sqlite_query import LocationFinder
+from tests.paths import adm4_codes_csv_path, temp_local_db_path
+from tests.tests_utils import get_tables_name
 
 
 @pytest_asyncio.fixture(scope="module")

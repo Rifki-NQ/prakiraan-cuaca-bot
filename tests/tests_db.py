@@ -1,14 +1,15 @@
 """This module has the responsibility to setup and seed the testing database."""
 
 import logging
-from typing import Any
-from datetime import datetime
 from dataclasses import dataclass
-from sqlalchemy import Table, MetaData
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import MetaData, Table
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from src.exceptions import DBNotInitializedError
 
+from src.exceptions import DBNotInitializedError
 
 logger = logging.getLogger(__name__)
 

@@ -1,23 +1,25 @@
 import logging
-from typing import Any
 from datetime import datetime
+from typing import Any
+
 from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    Integer,
     MetaData,
     Row,
-    Table,
-    Column,
     String,
-    Integer,
-    BigInteger,
-    DateTime,
+    Table,
     select,
 )
-from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.dialects.postgresql import insert
-from src.utils import BOT_DATETIME
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from src.exceptions import DBNotInitializedError
 from src.models.contexts import BotDBContext
 from src.models.domain_model import BotUserModel, BotUserStateModel
-from src.exceptions import DBNotInitializedError
+from src.utils import BOT_DATETIME
 
 logger = logging.getLogger(__name__)
 

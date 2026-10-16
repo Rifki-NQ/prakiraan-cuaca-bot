@@ -1,14 +1,15 @@
 # pyright: reportPrivateUsage=false
-import pytest
-import pytest_asyncio
-from unittest.mock import patch
 import asyncio
 import time
 from collections.abc import AsyncGenerator
 from contextlib import suppress
+from unittest.mock import patch
+
+import pytest
+import pytest_asyncio
+
 from src.bot.bot_respond_throttler import UserRespondThrottler
 from src.exceptions import BotThrottlerError
-
 
 FAKE_CHAT_ID = 1
 DEFAULT_COOLDOWN = 0.1

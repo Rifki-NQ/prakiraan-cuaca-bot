@@ -1,18 +1,19 @@
-import logging
 import asyncio
+import logging
 from collections.abc import AsyncIterable
 from datetime import datetime, timedelta
+
+from src.models.contexts import BotUserStateContext
 from src.models.domain_model import (
-    ForecastModel,
     BotUserModel,
     BotUserStateModel,
     DatetimeModel,
+    ForecastModel,
 )
 from src.models.enums import UserLocationState
-from src.models.contexts import BotUserStateContext
 from src.models.protocols import (
-    ETLQueryProtocol,
     BotQueryProtocol,
+    ETLQueryProtocol,
 )
 from src.utils import BOT_DATETIME
 

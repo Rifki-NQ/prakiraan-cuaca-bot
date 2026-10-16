@@ -1,7 +1,8 @@
 from logging import Logger
 from typing import NoReturn
-from src.models.domain_model import BotUserModel
+
 from src.exceptions import DataIntegrityError
+from src.models.domain_model import BotUserModel
 
 
 def raise_data_integrity_error(chat_id: int, re_enter_value: str) -> NoReturn:

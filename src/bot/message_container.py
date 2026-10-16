@@ -150,27 +150,32 @@ def forecasts_message_header(adm4_code: str, date: str) -> str:
     return f"📍 <b>Forecast for area {adm4_code}</b>\n🗓 As of {date}\n"
 
 
-# see the params name detail in src/models/domain_model.ForecastModel
 def format_one_forecast(
     forecast_time: str,
     temp: int,
-    ttc: int,
-    tp: float,
-    weat_desc: str,
-    ws: float,
-    humidity: int,
-    visibility: int,
+    ttc: int | None,
+    tp: float | None,
+    weat_desc: str | None,
+    ws: float | None,
+    humidity: int | None,
+    visibility: int | None,
 ) -> str:
     return (
         f"⏰ <b>{forecast_time}</b>\n"
-        f"   {weat_desc}\n"
+        f"   {weat_desc if weat_desc is not None else 'No description'}\n"
         f"🌡 Temperature: {temp}°C\n"
-        f"💧 Humidity: {humidity}%\n"
-        f"☁️ Cloud cover: {ttc}%\n"
-        f"🌧 Precipitation: {tp} mm\n"
-        f"💨 Wind: {ws} km/h\n"
-        f"👁 Visibility: {visibility} m\n"
+        f"💧 Humidity: {add_unit(humidity, '%')}\n"
+        f"☁️ Cloud cover: {add_unit(ttc, '%')}\n"
+        f"🌧 Precipitation: {add_unit(tp, ' mm')}\n"
+        f"💨 Wind: {add_unit(ws, ' km/h')}\n"
+        f"👁 Visibility: {add_unit(visibility, ' m')}\n"
     )
+
+
+def add_unit(value: float | None, unit: str) -> str:
+    if value is not None:
+        return f"{value}{unit}"
+    return "No data"
 
 
 def no_forecast_result_error_message(

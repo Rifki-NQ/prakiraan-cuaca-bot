@@ -1,22 +1,23 @@
-import logging
 import asyncio
-from typing import Literal, assert_never
+import logging
 from collections.abc import Awaitable, Callable
+from typing import Literal, assert_never
+
 from src.bot import message_container
 from src.bot.bot_router import route_command
 from src.bot.forecast_responder import get_merged_forecasts
+from src.exceptions import DataIntegrityError
+from src.models.domain_model import (
+    BotUserModel,
+    BotUserStateModel,
+    LocationFlowResult,
+    LocationFlowResultComplete,
+)
+from src.models.enums import BotAction, Commands, UserDataRestorationResult
 from src.models.protocols import (
     BotServiceProtocol,
     LocationFlowHandlerProtocol,
 )
-from src.models.domain_model import (
-    LocationFlowResult,
-    LocationFlowResultComplete,
-    BotUserModel,
-    BotUserStateModel,
-)
-from src.models.enums import Commands, BotAction, UserDataRestorationResult
-from src.exceptions import DataIntegrityError
 
 logger = logging.getLogger(__name__)
 

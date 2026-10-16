@@ -1,21 +1,22 @@
 import logging
+
 from src.bot import message_container
-from src.models.domain_model import (
-    LocationFlowResult,
-    LocationFlowResultComplete,
-    BotUserModel,
-    BotUserStateModel,
-)
-from src.models.protocols import LocationFinderProtocol
-from src.models.enums import UserStateCheckLevel
 from src.bot.bot_utils import (
-    raise_data_integrity_error,
     get_user_data_or_raise,
     merge_messages,
+    raise_data_integrity_error,
 )
 from src.exceptions import (
     EmptyQueryResultError,
 )
+from src.models.domain_model import (
+    BotUserModel,
+    BotUserStateModel,
+    LocationFlowResult,
+    LocationFlowResultComplete,
+)
+from src.models.enums import UserStateCheckLevel
+from src.models.protocols import LocationFinderProtocol
 
 logger = logging.getLogger(__name__)
 

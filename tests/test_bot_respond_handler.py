@@ -1,28 +1,29 @@
 # pyright: reportPrivateUsage=false
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
-from tests.mock_class.mock_bot_service import MockBotService
-from tests.mock_class.mock_location_flow_handler import (
-    MockLocationFlowHandlerNoError,
-    MockLocationFlowHandlerWithError,
-)
+
+from src.bot import message_container
 from src.bot.bot_respond_handler import BotRespondHandler
 from src.bot.location_flow_handler import LocationFlowHandler
-from src.bot import message_container
+from src.exceptions import DataIntegrityError
+from src.models.contexts import BotUserStateContext
 from src.models.domain_model import (
     BotUserStateModel,
     LocationFlowResult,
     LocationFlowResultComplete,
 )
-from src.models.contexts import BotUserStateContext
 from src.models.enums import (
     BotAction,
     Commands,
-    UserLocationState,
     UserDataRestorationResult,
+    UserLocationState,
 )
-from src.exceptions import DataIntegrityError
-
+from tests.mock_class.mock_bot_service import MockBotService
+from tests.mock_class.mock_location_flow_handler import (
+    MockLocationFlowHandlerNoError,
+    MockLocationFlowHandlerWithError,
+)
 
 FAKE_CHAT_ID = 1
 FAKE_INPUT_VALUE = "fake input"
@@ -474,16 +475,18 @@ class TestHandleShowUserCurrentLocation:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         caplog.set_level(10)
-        with pytest.raises(DataIntegrityError) as exc_info:
-            with patch.object(
+        with (
+            pytest.raises(DataIntegrityError) as exc_info,
+            patch.object(
                 bot_respond_handler_err,
                 "_handle_when_user_data_is_missing",
                 new_callable=AsyncMock,
                 return_value=UserDataRestorationResult.FAILED,
-            ):
-                await bot_respond_handler_err._handle_show_user_current_location(
-                    chat_id=FAKE_CHAT_ID
-                )
+            ),
+        ):
+            await bot_respond_handler_err._handle_show_user_current_location(
+                chat_id=FAKE_CHAT_ID
+            )
         assert exc_info.value.chat_id == FAKE_CHAT_ID
         assert exc_info.value.message == "fake error"
         assert "create_or_update_user called" in caplog.messages

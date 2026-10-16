@@ -1,9 +1,10 @@
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
-from src.main import get_env
-from src.queries.sqlite_query import LocationFinder
+
 from src.bot.location_flow_handler import LocationFlowHandler
+from src.exceptions import DataIntegrityError
+from src.main import get_env
 from src.models.domain_model import (
     BotUserModel,
     BotUserStateModel,
@@ -11,8 +12,7 @@ from src.models.domain_model import (
     LocationFlowResultComplete,
 )
 from src.models.enums import UserStateCheckLevel
-from src.exceptions import DataIntegrityError
-
+from src.queries.sqlite_query import LocationFinder
 
 load_dotenv()
 local_db_url = get_env("TEST_LOCAL_DATABASE_URL")
@@ -100,8 +100,10 @@ async def test_handle_input_for_city_or_regency_location_found(
     assert result.bot_user_state.kecamatan is None
     assert result.bot_user_state.desa_atau_kelurahan is None
 
-    assert f"updated to <b>{input}</b>" in result.message
-    assert "Select your <b>subdistrict</b>" in result.message
+    assert (
+        f"Your <b>city or regency</b> has been set to <b>{input}</b>" in result.message
+    )
+    assert "Choose your <b>subdistrict</b>" in result.message
 
 
 async def test_handle_input_for_city_or_regency_location_no_exact_match(
@@ -118,7 +120,7 @@ async def test_handle_input_for_city_or_regency_location_no_exact_match(
     )
     assert isinstance(result, LocationFlowResult)
     assert result.bot_user_state is None
-    assert "Select your <b>city or regency</b> from the list" in result.message
+    assert "Choose your <b>city or regency</b> from the list" in result.message
 
 
 async def test_handle_input_for_city_or_regency_location_not_found(
@@ -134,7 +136,7 @@ async def test_handle_input_for_city_or_regency_location_not_found(
     )
     assert isinstance(result, LocationFlowResult)
     assert result.bot_user_state is None
-    assert "<b>isakeb</b> not found" in result.message
+    assert f"<b>{input}</b> wasn't found" in result.message
 
 
 async def test_handle_input_for_subdistrict_location_found(
@@ -153,8 +155,8 @@ async def test_handle_input_for_subdistrict_location_found(
     assert result.bot_user_state.kecamatan == input
     assert result.bot_user_state.desa_atau_kelurahan is None
 
-    assert f"updated to <b>{input}</b>" in result.message
-    assert "Select your <b>village</b>" in result.message
+    assert f"Your <b>subdistrict</b> has been set to <b>{input}</b>" in result.message
+    assert "Choose your <b>village</b>" in result.message
 
 
 async def test_handle_input_for_subdistrict_location_not_found(
@@ -168,7 +170,7 @@ async def test_handle_input_for_subdistrict_location_not_found(
     )
     assert isinstance(result, LocationFlowResult)
     assert result.bot_user_state is None
-    assert "select from the list" in result.message
+    assert f"<b>{input}</b> wasn't found" in result.message
 
 
 async def test_handle_input_for_village_location_found(
@@ -187,8 +189,8 @@ async def test_handle_input_for_village_location_found(
     assert result.bot_user_state.desa_atau_kelurahan == input
     assert result.adm4_code == "32.16.20.2002"
 
-    assert f"updated to <b>{input}</b>" in result.message
-    assert "address updated" in result.message
+    assert f"Your <b>village</b> has been set to <b>{input}</b>" in result.message
+    assert "Your location has been saved!" in result.message
 
 
 async def test_handle_input_for_village_location_not_found(
@@ -202,7 +204,7 @@ async def test_handle_input_for_village_location_not_found(
     )
     assert isinstance(result, LocationFlowResult)
     assert result.bot_user_state is None
-    assert "select from the list" in result.message
+    assert f"<b>{input}</b> wasn't found" in result.message
 
 
 async def test_revert_location_state_kabupaten_atau_kota_is_none(
@@ -220,7 +222,7 @@ async def test_revert_location_state_kabupaten_atau_kota_is_none(
     assert result.bot_user_state.kecamatan is None
     assert result.bot_user_state.desa_atau_kelurahan is None
 
-    assert "Enter your <b>city or regency</b>" in result.message
+    assert "Send your <b>city or regency</b>" in result.message
 
 
 async def test_revert_location_state_kecamatan_is_none(
@@ -238,8 +240,8 @@ async def test_revert_location_state_kecamatan_is_none(
     assert result.bot_user_state.kecamatan is None
     assert result.bot_user_state.desa_atau_kelurahan is None
 
-    assert "<b>city or regency</b> reverted" in result.message
-    assert "Enter your <b>city or regency</b>" in result.message
+    assert "<b>city or regency</b> has been removed" in result.message
+    assert "Send your <b>city or regency</b>" in result.message
 
 
 async def test_revert_location_state_desa_atau_kelurahan_is_none(
@@ -257,8 +259,8 @@ async def test_revert_location_state_desa_atau_kelurahan_is_none(
     assert result.bot_user_state.kecamatan is None
     assert result.bot_user_state.desa_atau_kelurahan is None
 
-    assert "<b>subdistrict</b> reverted" in result.message
-    assert "Select your <b>subdistrict</b>" in result.message
+    assert "<b>subdistrict</b> has been removed" in result.message
+    assert "Choose your <b>subdistrict</b>" in result.message
 
 
 async def test_revert_location_state_on_completed_user_state(
@@ -276,8 +278,8 @@ async def test_revert_location_state_on_completed_user_state(
     assert result.bot_user_state.kecamatan == user_state.kecamatan
     assert result.bot_user_state.desa_atau_kelurahan is None
 
-    assert "<b>village</b> reverted" in result.message
-    assert "Select your <b>village</b>" in result.message
+    assert "<b>village</b> has been removed" in result.message
+    assert "Choose your <b>village</b>" in result.message
 
 
 async def test_get_full_address_found(

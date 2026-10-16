@@ -1,13 +1,15 @@
-import logging
 import csv
-from typing import cast, Any
+import logging
 from collections.abc import Iterable
 from pathlib import Path
-from sqlalchemy import MetaData, Table, Column, String, Row, insert, select
+from typing import Any, cast
+
+from sqlalchemy import Column, MetaData, Row, String, Table, insert, select
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+
+from src.exceptions import DBNotInitializedError, EmptyQueryResultError
 from src.models.contexts import LocalDBContext
 from src.models.domain_model import CSVLocationDataModel
-from src.exceptions import DBNotInitializedError, EmptyQueryResultError
 
 logger = logging.getLogger(__name__)
 

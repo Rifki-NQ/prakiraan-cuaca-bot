@@ -1,7 +1,6 @@
-from src.models.domain_model import ActionEntry
-from src.models.enums import Commands, BotAction, UserLocationState
 from src.exceptions import ActionRegistryLookupError
-
+from src.models.domain_model import ActionEntry
+from src.models.enums import BotAction, Commands, UserLocationState
 
 START_COMMAND_REGISTRY: list[ActionEntry] = [
     ActionEntry(

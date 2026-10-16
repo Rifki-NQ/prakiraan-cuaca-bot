@@ -1,5 +1,5 @@
-from typing import Any
 from datetime import datetime
+from typing import Any
 
 MOCK_ETL_DATA_INFO: dict[str, Any] = {
     "adm4_code": "32.16.21.2005",
