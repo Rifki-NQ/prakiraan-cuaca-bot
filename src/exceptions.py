@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from src.bot import message_container
+
 
 class DomainError(Exception):
     """Base class for all domain/business error"""
@@ -68,7 +70,9 @@ class EmptyMessageTextError(BotHandlerError):
     """Raised when user send empty text in the message"""
 
     def __init__(self, chat_id: int) -> None:
-        super().__init__(chat_id, "This bot can only proceed plain text")
+        super().__init__(
+            chat_id, message_container.ERROR_MESSAGE_FOR_EMPTY_MESSAGE_TEXT
+        )
 
 
 class NoForecastResultError(BotHandlerError):
@@ -88,7 +92,7 @@ class InvalidCommandError(BotHandlerError):
         self.command = command
         super().__init__(
             chat_id,
-            f"{command} is not a known command, type /help to see available commands",
+            message_container.error_message_for_invalid_command(command),
         )
 
 
@@ -97,9 +101,7 @@ class NotCommandTypeError(BotHandlerError):
 
     def __init__(self, chat_id: int, text: str) -> None:
         self.text = text
-        super().__init__(
-            chat_id, "First text have to be a command, started with / (a slash)"
-        )
+        super().__init__(chat_id, message_container.ERROR_MESSAGE_FOR_NOT_COMMAND_TYPE)
 
 
 class DataIntegrityError(BotHandlerError):
