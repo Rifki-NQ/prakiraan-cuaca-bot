@@ -1,4 +1,19 @@
+from html import escape
+
 from src.models.domain_model import BotUserStateModel
+
+
+def escape_html(value: str | None) -> str | None:
+    if value is not None:
+        return escape(value)
+    return None
+
+
+def add_unit(value: int | float | None, unit: str) -> str:
+    if value is not None:
+        return f"{value}{unit}"
+    return "No data"
+
 
 SHOW_INTRO = """Welcome to prakiraan-cuaca-bot!
 
@@ -26,6 +41,18 @@ SHOW_HELP = """<b>Available commands</b>
 /help reset - More about /reset
 /help revert - More about /revert
 """
+
+
+ERROR_MESSAGE_FOR_EMPTY_MESSAGE_TEXT = "This bot can only proceed plain text"
+
+
+def error_message_for_invalid_command(command: str) -> str:
+    return f"{escape_html(command)} is not a known command, type /help to see available commands"
+
+
+ERROR_MESSAGE_FOR_NOT_COMMAND_TYPE = (
+    "First text have to be a command, started with / (a slash)"
+)
 
 
 SHOW_WELCOME_BACK_INTRO = "Welcome back to prakiraan-cuaca-bot!"
@@ -59,69 +86,69 @@ TELLS_USER_NO_NEED_FOR_REVERT = "There's nothing to revert yet."
 
 
 def notify_to_add_input_value(command: str) -> str:
-    return f"The {command} command needs a value. Please add it after the command."
+    return f"The {escape_html(command)} command needs a value. Please add it after the command."
 
 
 def notify_to_not_add_input_value(command: str) -> str:
-    return f"The {command} command doesn't take a value. Please send it on its own."
+    return f"The {escape_html(command)} command doesn't take a value. Please send it on its own."
 
 
 def show_revert_message(reverted_state: str) -> str:
-    return f"<b>{reverted_state}</b> has been removed from your location setup."
+    return f"<b>{escape_html(reverted_state)}</b> has been removed from your location setup."
 
 
 def notify_city_or_regency_not_found(city_or_regency: str | None) -> str:
-    return f"Sorry, <b>{city_or_regency}</b> wasn't found. Please check the spelling and try again."
+    return f"Sorry, <b>{escape_html(city_or_regency)}</b> wasn't found. Please check the spelling and try again."
 
 
 def notify_to_choose_city_or_regency(city_or_regency_list: str) -> str:
     return f"""Choose your <b>city or regency</b> from the list below
 using /input <b>your city or regency</b>
-{city_or_regency_list}
+{escape_html(city_or_regency_list)}
 
 <i>Example: /input kabupaten bekasi</i>"""
 
 
 def notify_city_or_regency_updated(city_or_regency: str) -> str:
-    return f"Your <b>city or regency</b> has been set to <b>{city_or_regency}</b>."
+    return f"Your <b>city or regency</b> has been set to <b>{escape_html(city_or_regency)}</b>."
 
 
 def notify_subdistrict_not_found(subdistrict: str | None, subdistrict_list: str) -> str:
-    return f"""Sorry, <b>{subdistrict}</b> wasn't found. Please choose from the list below
+    return f"""Sorry, <b>{escape_html(subdistrict)}</b> wasn't found. Please choose from the list below
 using /input <b>your subdistrict</b>
-{subdistrict_list}
+{escape_html(subdistrict_list)}
 
 <i>Example: /input cikarang selatan</i>"""
 
 
 def notify_subdistrict_updated(subdistrict: str) -> str:
-    return f"Your <b>subdistrict</b> has been set to <b>{subdistrict}</b>."
+    return f"Your <b>subdistrict</b> has been set to <b>{escape_html(subdistrict)}</b>."
 
 
 def notify_to_choose_subdistrict(subdistrict_list: str) -> str:
     return f"""Choose your <b>subdistrict</b> from the list below
 using /input <b>your subdistrict</b>
-{subdistrict_list}
+{escape_html(subdistrict_list)}
 
 <i>Example: /input cikarang selatan</i>"""
 
 
 def notify_village_not_found(village: str | None, village_list: str) -> str:
-    return f"""Sorry, <b>{village}</b> wasn't found. Please choose from the list below
+    return f"""Sorry, <b>{escape_html(village)}</b> wasn't found. Please choose from the list below
 using /input <b>your village</b>
-{village_list}
+{escape_html(village_list)}
 
 <i>Example: /input sukamahi</i>"""
 
 
 def notify_village_updated(village: str) -> str:
-    return f"Your <b>village</b> has been set to <b>{village}</b>."
+    return f"Your <b>village</b> has been set to <b>{escape_html(village)}</b>."
 
 
 def notify_to_choose_village(village_list: str) -> str:
     return f"""Choose your <b>village</b> from the list below
 using /input <b>your village</b>
-{village_list}
+{escape_html(village_list)}
 
 <i>Example: /input sukamahi</i>"""
 
@@ -129,10 +156,10 @@ using /input <b>your village</b>
 def notify_location_updated(user_state: BotUserStateModel, adm4_code: str) -> str:
     return f"""Your location has been saved!
 
-City or regency: <b>{user_state.kabupaten_atau_kota}</b>
-Subdistrict: <b>{user_state.kecamatan}</b>
-Village: <b>{user_state.desa_atau_kelurahan}</b>
-Area code (ADM4): <b>{adm4_code}</b>"""
+City or regency: <b>{escape_html(user_state.kabupaten_atau_kota)}</b>
+Subdistrict: <b>{escape_html(user_state.kecamatan)}</b>
+Village: <b>{escape_html(user_state.desa_atau_kelurahan)}</b>
+Area code (ADM4): <b>{escape_html(adm4_code)}</b>"""
 
 
 def show_user_full_address(
@@ -140,14 +167,14 @@ def show_user_full_address(
 ) -> str:
     return f"""📍 <b>Your location</b>
 
-City or regency: <b>{city_or_regency}</b>
-Subdistrict: <b>{subdistrict}</b>
-Village: <b>{village}</b>
-Area code (ADM4): <b>{adm4_code}</b>"""
+City or regency: <b>{escape_html(city_or_regency)}</b>
+Subdistrict: <b>{escape_html(subdistrict)}</b>
+Village: <b>{escape_html(village)}</b>
+Area code (ADM4): <b>{escape_html(adm4_code)}</b>"""
 
 
 def forecasts_message_header(adm4_code: str, date: str) -> str:
-    return f"📍 <b>Forecast for area {adm4_code}</b>\n🗓 As of {date}\n"
+    return f"📍 <b>Forecast for area {escape_html(adm4_code)}</b>\n🗓 As of {escape_html(date)}\n"
 
 
 def format_one_forecast(
@@ -161,8 +188,8 @@ def format_one_forecast(
     visibility: int | None,
 ) -> str:
     return (
-        f"⏰ <b>{forecast_time}</b>\n"
-        f"   {weat_desc if weat_desc is not None else 'No description'}\n"
+        f"⏰ <b>{escape_html(forecast_time)}</b>\n"
+        f"   {escape_html(weat_desc) if weat_desc is not None else 'No description'}\n"
         f"🌡 Temperature: {temp}°C\n"
         f"💧 Humidity: {add_unit(humidity, '%')}\n"
         f"☁️ Cloud cover: {add_unit(ttc, '%')}\n"
@@ -172,21 +199,15 @@ def format_one_forecast(
     )
 
 
-def add_unit(value: float | None, unit: str) -> str:
-    if value is not None:
-        return f"{value}{unit}"
-    return "No data"
-
-
 def no_forecast_result_error_message(
     adm4_code: str, start_dt: str | None, end_dt: str | None
 ) -> str:
-    return f"""Sorry, no forecast is available for area <b>{adm4_code}</b>
-between {start_dt} and {end_dt}. Please try again later."""
+    return f"""Sorry, no forecast is available for area <b>{escape_html(adm4_code)}</b>
+between {escape_html(start_dt)} and {escape_html(end_dt)}. Please try again later."""
 
 
 def show_invalid_extra_help_value_message(help_value: str) -> str:
-    return f"Sorry, there's no detailed help for <b>{help_value}</b>. Type /help to see the available topics."
+    return f"Sorry, there's no detailed help for <b>{escape_html(help_value)}</b>. Type /help to see the available topics."
 
 
 SHOW_LOCATION_COMMAND_HELP = """<b>/location</b>
