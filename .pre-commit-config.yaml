@@ -25,7 +25,7 @@ repos:
 
       - id: pytest-full
         name: pytest (full test)
-        entry: pytest
+        entry: pytest -m "not prod_db"
         language: system
         pass_filenames: false
         always_run: true
