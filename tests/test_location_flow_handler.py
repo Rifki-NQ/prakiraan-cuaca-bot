@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
@@ -86,22 +87,28 @@ def _completed_user_state() -> BotUserStateModel:
     )
 
 
+@pytest.mark.parametrize(
+    "input_value",
+    ["kabupaten bekasi", "Kabupaten BeKasi"],
+    ids=["all_lowercase", "mixedcase"],
+)
 async def test_handle_input_for_city_or_regency_location_found(
-    location_flow_handler: LocationFlowHandler,
+    location_flow_handler: LocationFlowHandler, input_value: str
 ) -> None:
-    input = "kabupaten bekasi"
     result = await location_flow_handler.handle_input_for_city_or_regency(
-        chat_id=FAKE_CHAT_ID, city_or_regency=input
+        chat_id=FAKE_CHAT_ID, city_or_regency=input_value
     )
     assert isinstance(result, LocationFlowResult)
     assert result.bot_user_state is not None
     assert result.bot_user_state.chat_id == FAKE_CHAT_ID
-    assert result.bot_user_state.kabupaten_atau_kota == input
+    assert result.bot_user_state.kabupaten_atau_kota is not None
+    assert result.bot_user_state.kabupaten_atau_kota.lower() == input_value.lower()
     assert result.bot_user_state.kecamatan is None
     assert result.bot_user_state.desa_atau_kelurahan is None
 
     assert (
-        f"Your <b>city or regency</b> has been set to <b>{input}</b>" in result.message
+        f"Your <b>city or regency</b> has been set to <b>{result.bot_user_state.kabupaten_atau_kota}</b>"
+        in result.message
     )
     assert "Choose your <b>subdistrict</b>" in result.message
 
@@ -139,23 +146,32 @@ async def test_handle_input_for_city_or_regency_location_not_found(
     assert f"<b>{input}</b> wasn't found" in result.message
 
 
+@pytest.mark.parametrize(
+    "input_value",
+    ["cikarang selatan", "Cikarang Selatan"],
+    ids=["all_lowercase", "mixedcase"],
+)
 async def test_handle_input_for_subdistrict_location_found(
     state_at_kabupaten_atau_kota_user_state: BotUserStateModel,
     location_flow_handler: LocationFlowHandler,
+    input_value: str,
 ) -> None:
-    input = "cikarang selatan"
     user_state = state_at_kabupaten_atau_kota_user_state
     result = await location_flow_handler.handle_input_for_subdistrict(
-        chat_id=FAKE_CHAT_ID, user_state=user_state, subdistrict=input
+        chat_id=FAKE_CHAT_ID, user_state=user_state, subdistrict=input_value
     )
     assert isinstance(result, LocationFlowResult)
     assert result.bot_user_state is not None
     assert result.bot_user_state.chat_id == FAKE_CHAT_ID
     assert result.bot_user_state.kabupaten_atau_kota == user_state.kabupaten_atau_kota
-    assert result.bot_user_state.kecamatan == input
+    assert result.bot_user_state.kecamatan is not None
+    assert result.bot_user_state.kecamatan.lower() == input_value.lower()
     assert result.bot_user_state.desa_atau_kelurahan is None
 
-    assert f"Your <b>subdistrict</b> has been set to <b>{input}</b>" in result.message
+    assert (
+        f"Your <b>subdistrict</b> has been set to <b>{result.bot_user_state.kecamatan}</b>"
+        in result.message
+    )
     assert "Choose your <b>village</b>" in result.message
 
 
@@ -173,23 +189,30 @@ async def test_handle_input_for_subdistrict_location_not_found(
     assert f"<b>{input}</b> wasn't found" in result.message
 
 
+@pytest.mark.parametrize(
+    "input_value", ["sukamahi", "SukamaHi"], ids=["all_lowercase", "mixedcase"]
+)
 async def test_handle_input_for_village_location_found(
     state_at_kecamatan_user_state: BotUserStateModel,
     location_flow_handler: LocationFlowHandler,
+    input_value: str,
 ) -> None:
-    input = "sukamahi"
     user_state = state_at_kecamatan_user_state
     result = await location_flow_handler.handle_input_for_village(
-        chat_id=FAKE_CHAT_ID, user_state=user_state, village=input
+        chat_id=FAKE_CHAT_ID, user_state=user_state, village=input_value
     )
     assert isinstance(result, LocationFlowResultComplete)
     assert result.bot_user_state.chat_id == FAKE_CHAT_ID
     assert result.bot_user_state.kabupaten_atau_kota == user_state.kabupaten_atau_kota
     assert result.bot_user_state.kecamatan == user_state.kecamatan
-    assert result.bot_user_state.desa_atau_kelurahan == input
+    assert result.bot_user_state.desa_atau_kelurahan is not None
+    assert result.bot_user_state.desa_atau_kelurahan.lower() == input_value.lower()
     assert result.adm4_code == "32.16.20.2002"
 
-    assert f"Your <b>village</b> has been set to <b>{input}</b>" in result.message
+    assert (
+        f"Your <b>village</b> has been set to <b>{result.bot_user_state.desa_atau_kelurahan}</b>"
+        in result.message
+    )
     assert "Your location has been saved!" in result.message
 
 
@@ -380,7 +403,7 @@ async def test_get_merged_village_list(
 async def test_get_subdistricts_or_raise_found(
     location_flow_handler: LocationFlowHandler,
 ) -> None:
-    result = await location_flow_handler._get_subdistricts_or_raise(  # pyright: ignore[reportPrivateUsage]
+    result = await location_flow_handler._get_subdistricts_or_raise(
         chat_id=FAKE_CHAT_ID, city_or_regency="kabupaten bekasi"
     )
     assert "cikarang pusat" in result
@@ -394,7 +417,7 @@ async def test_get_subdistricts_or_raise_not_found(
 ) -> None:
     caplog.set_level(40)  # level: ERROR
     with pytest.raises(DataIntegrityError) as exc_info:
-        await location_flow_handler._get_subdistricts_or_raise(  # pyright: ignore[reportPrivateUsage]
+        await location_flow_handler._get_subdistricts_or_raise(
             chat_id=FAKE_CHAT_ID,
             city_or_regency="wkwkwkw",  # <- invalid / non-existent
         )
@@ -407,7 +430,7 @@ async def test_get_subdistricts_or_raise_not_found(
 async def test_get_villages_or_raise_found(
     location_flow_handler: LocationFlowHandler,
 ) -> None:
-    result = await location_flow_handler._get_villages_or_raise(  # pyright: ignore[reportPrivateUsage]
+    result = await location_flow_handler._get_villages_or_raise(
         chat_id=FAKE_CHAT_ID,
         city_or_regency="kabupaten bekasi",
         subdistrict="cikarang pusat",
@@ -422,7 +445,7 @@ async def test_get_villages_or_raise_not_found(
 ) -> None:
     caplog.set_level(40)  # level: ERROR
     with pytest.raises(DataIntegrityError) as exc_info:
-        await location_flow_handler._get_villages_or_raise(  # pyright: ignore[reportPrivateUsage]
+        await location_flow_handler._get_villages_or_raise(
             chat_id=FAKE_CHAT_ID,
             city_or_regency="kabupaten bekasi",
             subdistrict="sepatu kw tuh",  # <- invalid / non-existent
@@ -455,7 +478,7 @@ async def test_get_user_state_or_raise_attr_check_level_none(
     caplog.set_level(40)  # level: ERROR
     if should_raise:
         with pytest.raises(DataIntegrityError):
-            location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+            location_flow_handler._get_user_state_or_raise(
                 chat_id=FAKE_CHAT_ID,
                 user_state=user_state,
                 attr_check_level=None,
@@ -463,7 +486,7 @@ async def test_get_user_state_or_raise_attr_check_level_none(
         assert log_message is not None
         assert log_message in caplog.messages[0]
     else:
-        result = location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+        result = location_flow_handler._get_user_state_or_raise(
             chat_id=FAKE_CHAT_ID,
             user_state=user_state,
             attr_check_level=None,
@@ -495,7 +518,7 @@ async def test_get_user_state_or_raise_attr_check_level_city_or_regency(
     caplog.set_level(40)  # level: ERROR
     if should_raise:
         with pytest.raises(DataIntegrityError):
-            location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+            location_flow_handler._get_user_state_or_raise(
                 chat_id=FAKE_CHAT_ID,
                 user_state=user_state,
                 attr_check_level=UserStateCheckLevel.CITY_OR_REGENCY,
@@ -503,7 +526,7 @@ async def test_get_user_state_or_raise_attr_check_level_city_or_regency(
         assert log_message is not None
         assert log_message in caplog.messages[0]
     else:
-        result = location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+        result = location_flow_handler._get_user_state_or_raise(
             chat_id=FAKE_CHAT_ID,
             user_state=user_state,
             attr_check_level=UserStateCheckLevel.CITY_OR_REGENCY,
@@ -535,7 +558,7 @@ async def test_get_user_state_or_raise_attr_check_level_subdistrict(
     caplog.set_level(40)  # level: ERROR
     if should_raise:
         with pytest.raises(DataIntegrityError):
-            location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+            location_flow_handler._get_user_state_or_raise(
                 chat_id=FAKE_CHAT_ID,
                 user_state=user_state,
                 attr_check_level=UserStateCheckLevel.SUBDISTRICT,
@@ -543,7 +566,7 @@ async def test_get_user_state_or_raise_attr_check_level_subdistrict(
         assert log_message is not None
         assert log_message in caplog.messages[0]
     else:
-        result = location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+        result = location_flow_handler._get_user_state_or_raise(
             chat_id=FAKE_CHAT_ID,
             user_state=user_state,
             attr_check_level=UserStateCheckLevel.SUBDISTRICT,
@@ -575,7 +598,7 @@ async def test_get_user_state_or_raise_attr_check_level_village(
     caplog.set_level(40)  # level: ERROR
     if should_raise:
         with pytest.raises(DataIntegrityError):
-            location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+            location_flow_handler._get_user_state_or_raise(
                 chat_id=FAKE_CHAT_ID,
                 user_state=user_state,
                 attr_check_level=UserStateCheckLevel.VILLAGE,
@@ -583,7 +606,7 @@ async def test_get_user_state_or_raise_attr_check_level_village(
         assert log_message is not None
         assert log_message in caplog.messages[0]
     else:
-        result = location_flow_handler._get_user_state_or_raise(  # pyright: ignore[reportPrivateUsage]
+        result = location_flow_handler._get_user_state_or_raise(
             chat_id=FAKE_CHAT_ID,
             user_state=user_state,
             attr_check_level=UserStateCheckLevel.VILLAGE,
@@ -598,7 +621,7 @@ def test_build_flow_result_not_none_user_state(
     state_at_kecamatan_user_state: BotUserStateModel,
     location_flow_handler: LocationFlowHandler,
 ) -> None:
-    result = location_flow_handler._build_flow_result(  # pyright: ignore[reportPrivateUsage]
+    result = location_flow_handler._build_flow_result(
         state_at_kecamatan_user_state, "message a", "message b", "message c"
     )
     assert isinstance(result, LocationFlowResult)
@@ -609,7 +632,7 @@ def test_build_flow_result_not_none_user_state(
 def test_build_flow_result_none_user_state(
     location_flow_handler: LocationFlowHandler,
 ) -> None:
-    result = location_flow_handler._build_flow_result(  # pyright: ignore[reportPrivateUsage]
+    result = location_flow_handler._build_flow_result(
         None, "message a", "message b", "message c"
     )
     assert result.bot_user_state is None
@@ -617,10 +640,41 @@ def test_build_flow_result_none_user_state(
 
 
 def test_merge_list_multiple_values(location_flow_handler: LocationFlowHandler) -> None:
-    result = location_flow_handler._merge_list(["value a", "value b", "value c"])  # pyright: ignore[reportPrivateUsage]
+    result = location_flow_handler._merge_list(["value a", "value b", "value c"])
     assert result == "- value a\n- value b\n- value c"
 
 
 def test_merge_list_single_value(location_flow_handler: LocationFlowHandler) -> None:
-    result = location_flow_handler._merge_list(["value a"])  # pyright: ignore[reportPrivateUsage]
+    result = location_flow_handler._merge_list(["value a"])
     assert result == "- value a"
+
+
+class TestFindMatch:
+    def test_when_query_result_is_one(
+        self, location_flow_handler: LocationFlowHandler
+    ) -> None:
+        query_result = ["kabupaten bekasi"]
+        result = location_flow_handler._find_match(
+            user_input=query_result[0], query_result=query_result
+        )
+        assert result == query_result[0]
+
+    def test_when_query_result_is_more_than_one(
+        self, location_flow_handler: LocationFlowHandler
+    ) -> None:
+        query_result = ["cikarang pusat", "cikarang selatan", "setu"]
+        user_input = "Cikarang Pusat"  # there are uppercases in the input
+        result = location_flow_handler._find_match(
+            user_input=user_input, query_result=query_result
+        )
+        assert result == user_input.lower()
+
+    def test_when_query_result_is_none(
+        self, location_flow_handler: LocationFlowHandler
+    ) -> None:
+        query_result = ["cikarang pusat", "cikarang selatan", "setu"]
+        user_input = "Cikarang utara"  # no case-insensitive match with the query_result
+        result = location_flow_handler._find_match(
+            user_input=user_input, query_result=query_result
+        )
+        assert result is None

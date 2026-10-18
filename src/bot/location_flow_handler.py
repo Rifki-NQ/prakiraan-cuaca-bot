@@ -38,11 +38,12 @@ class LocationFlowHandler:
                     e.query.get("city_or_regency")
                 )
             )
-        if city_or_regency in result:
-            user_state = BotUserStateModel(chat_id, city_or_regency)
+        matched = self._find_match(city_or_regency, result)
+        if matched:
+            user_state = BotUserStateModel(chat_id, matched)
             return self._build_flow_result(
                 user_state,
-                message_container.notify_city_or_regency_updated(city_or_regency),
+                message_container.notify_city_or_regency_updated(matched),
                 message_container.notify_to_choose_subdistrict(
                     await self.get_merged_subdistrict_list(chat_id, user_state)
                 ),
@@ -69,13 +70,14 @@ class LocationFlowHandler:
         subdistricts = await self._get_subdistricts_or_raise(
             chat_id, user_state.kabupaten_atau_kota
         )
-        if subdistrict in subdistricts:
+        matched = self._find_match(subdistrict, subdistricts)
+        if matched:
             new_user_state = BotUserStateModel(
-                chat_id, user_state.kabupaten_atau_kota, subdistrict
+                chat_id, user_state.kabupaten_atau_kota, matched
             )
             return self._build_flow_result(
                 new_user_state,
-                message_container.notify_subdistrict_updated(subdistrict),
+                message_container.notify_subdistrict_updated(matched),
                 message_container.notify_to_choose_village(
                     await self.get_merged_village_list(chat_id, new_user_state)
                 ),
@@ -102,15 +104,16 @@ class LocationFlowHandler:
         villages = await self._get_villages_or_raise(
             chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan
         )
-        if village in villages:
+        matched = self._find_match(village, villages)
+        if matched:
             new_user_state = BotUserStateModel(
-                chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan, village
+                chat_id, user_state.kabupaten_atau_kota, user_state.kecamatan, matched
             )
             # immediately get the adm4_code based on the full address
             adm4_code = await self.get_adm4_code_or_raise(chat_id, new_user_state)
             return LocationFlowResultComplete(
                 message=merge_messages(
-                    message_container.notify_village_updated(village),
+                    message_container.notify_village_updated(matched),
                     message_container.notify_location_updated(
                         new_user_state,
                         adm4_code,
@@ -333,6 +336,20 @@ class LocationFlowHandler:
         return LocationFlowResult(
             message=merge_messages(*messages), bot_user_state=user_state
         )
+
+    def _find_match(self, user_input: str, query_result: list[str]) -> str | None:
+        """
+        Return the first query_result immediately if the length is 1,
+        if the length is not 1, iterate over the query_result and
+        do case-insensitive comparison until there is a match,
+        return None if both is failed to find a match.
+        """
+        if len(query_result) == 1:
+            return query_result[0]
+        for result in query_result:
+            if user_input.lower() == result.lower():
+                return result  # return the non-lowered result
+        return None
 
     def _merge_list(self, list_value: list[str]) -> str:
         """
