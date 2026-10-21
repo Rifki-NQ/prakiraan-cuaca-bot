@@ -23,6 +23,7 @@ from telegram.error import (
 
 from src import exceptions
 from src.bot.bot_handler import BotHandler
+from src.bot.bot_user_lock import BotUserLock
 from src.models.contexts import BotUpdateContext
 from src.models.enums import Commands
 from tests.mock_class.mock_bot_respond_handler import FakeBotRespondHandler
@@ -104,6 +105,7 @@ class BotHandlerContext:
     fake_bot_state: FakeBotStateHandler
     fake_global_throttler: FakeGlobalRespondThrottler
     fake_user_throttler: FakeUserRespondThrottler
+    user_lock: BotUserLock
 
 
 @pytest.fixture
@@ -113,11 +115,13 @@ def bot_handler_context() -> Iterable[BotHandlerContext]:
     global_throttler = FakeGlobalRespondThrottler()
     user_throttler = FakeUserRespondThrottler()
     fake_bot = FakeTelegramBot()
+    user_lock = BotUserLock()
     bot_handler = BotHandler(
         respond_handler=respond_handler,
         bot_state=bot_state,
         global_throttler=global_throttler,
         user_throttler=user_throttler,
+        bot_user_lock=user_lock,
     )
     with patch("src.bot.bot_handler.Bot", return_value=fake_bot):
         yield BotHandlerContext(
@@ -127,6 +131,7 @@ def bot_handler_context() -> Iterable[BotHandlerContext]:
             fake_bot_state=bot_state,
             fake_global_throttler=global_throttler,
             fake_user_throttler=user_throttler,
+            user_lock=user_lock,
         )
 
 
@@ -749,14 +754,21 @@ class TestRespondToUpdate:
         self, bot_handler_context: BotHandlerContext
     ) -> None:
         bot_handler = bot_handler_context.bot_handler
-        with patch.multiple(
-            bot_handler, _parse_update=DEFAULT, _send_message_with_retry=DEFAULT
-        ) as mock:
-            mock["_parse_update"].return_value = FAKE_UPDATE_CONTEXT
+        with (
+            patch.multiple(
+                bot_handler, _parse_update=DEFAULT, _send_message_with_retry=DEFAULT
+            ) as mock_bot_handler,
+            patch.object(bot_handler.bot_user_lock, "user_lock") as mock_user_lock,
+        ):
+            mock_bot_handler["_parse_update"].return_value = FAKE_UPDATE_CONTEXT
             await bot_handler._respond_to_update(
                 bot=bot_handler_context.fake_bot, update=FAKE_UPDATE
             )
-        mock["_parse_update"].assert_called_once_with(FAKE_UPDATE)
+        # assert bot_handler._parse_update() was called
+        mock_bot_handler["_parse_update"].assert_called_once_with(FAKE_UPDATE)
+        # assert bot_handler.bot_user_lock.user_lock() was called
+        mock_user_lock.assert_called_once_with(FAKE_UPDATE_CONTEXT.chat_id)
+        # assert bot_handler.respond_handler.parse_command() was awaited or called
         bot_handler_context.fake_respond_handler.assert_called_once_with(
             bot_handler.respond_handler.parse_command,
             [
@@ -765,7 +777,8 @@ class TestRespondToUpdate:
                 FAKE_UPDATE_CONTEXT.command_value,
             ],
         )
-        mock["_send_message_with_retry"].assert_awaited_once_with(
+        # assert bot_handler._send_message_with_retry() was awaited
+        mock_bot_handler["_send_message_with_retry"].assert_awaited_once_with(
             bot_handler_context.fake_bot,
             FAKE_CHAT_ID,
             FAKE_RESPOND_MESSAGE,  # based on tests/mock_class/mock_bot_respond_handler.py
@@ -788,6 +801,13 @@ class TestRespondToUpdate:
     async def test_concurrency_is_bounded(
         self, bot_handler_context: BotHandlerContext
     ) -> None:
+        """
+        Verify that concurrency is bounded when requests come from different users.
+
+        This exercises the semaphore: each update must have a unique chat ID,
+        because `bot_user_lock.user_lock()` limits concurrency to 1 for updates
+        that share the same chat ID, which would mask the semaphore's limit.
+        """
         bot_handler = bot_handler_context.bot_handler
         total_tasks = bot_handler.MAX_CONCURRENT_TASKS + 5
         in_flight = 0
@@ -807,7 +827,17 @@ class TestRespondToUpdate:
                 bot_handler, "_send_message_with_retry", side_effect=_tracked_send
             ) as send_mock,
             patch.object(
-                bot_handler, "_parse_update", return_value=FAKE_UPDATE_CONTEXT
+                bot_handler,
+                "_parse_update",
+                # simulate traffic from different users (unique chat IDs)
+                side_effect=[
+                    BotUpdateContext(
+                        chat_id=i,
+                        command=Commands.START,
+                        command_value="fake command value",
+                    )
+                    for i in range(total_tasks)
+                ],
             ),
         ):
             await asyncio.gather(
@@ -865,20 +895,32 @@ async def test_send_error_message_called_methods_and_args(
     bot_handler_context: BotHandlerContext,
 ) -> None:
     bot_handler = bot_handler_context.bot_handler
-    with patch.object(bot_handler, "_send_message_with_retry") as mock_method:
+    with (
+        patch.object(bot_handler, "_send_message_with_retry") as mock_send_error,
+        patch.object(bot_handler.bot_user_lock, "user_lock") as mock_user_lock,
+    ):
         await bot_handler._send_error_message(
             bot=bot_handler_context.fake_bot,
             chat_id=FAKE_CHAT_ID,
-            err_message="fake err message",
+            err_message="fake error message",
         )
-    mock_method.assert_awaited_once_with(
-        bot_handler_context.fake_bot, FAKE_CHAT_ID, "fake err message"
+    mock_user_lock.assert_called_once_with(FAKE_CHAT_ID)
+    mock_send_error.assert_awaited_once_with(
+        bot_handler_context.fake_bot, FAKE_CHAT_ID, "fake error message"
     )
 
 
 async def test_send_error_message_concurrency_is_bounded(
     bot_handler_context: BotHandlerContext,
 ) -> None:
+    """
+    Verify that concurrency is bounded when `_send_error_message()` is called
+    for different users.
+
+    This exercises the semaphore: each chat ID must be unique, because
+    `bot_user_lock.user_lock()` limits concurrency to 1 for calls that share
+    a chat ID, which would mask the semaphore's limit.
+    """
     bot_handler = bot_handler_context.bot_handler
     total_tasks = bot_handler.MAX_CONCURRENT_TASKS + 5
     in_flight = 0
@@ -897,13 +939,24 @@ async def test_send_error_message_concurrency_is_bounded(
         patch.object(
             bot_handler, "_send_message_with_retry", side_effect=_tracked_send
         ) as send_mock,
+        patch.object(
+            bot_handler,
+            "_parse_update",
+            # simulate traffic from different users (unique chat IDs)
+            side_effect=[
+                BotUpdateContext(
+                    chat_id=i,
+                    command=Commands.START,
+                    command_value="fake command value",
+                )
+                for i in range(total_tasks)
+            ],
+        ),
     ):
         await asyncio.gather(
             *(
-                bot_handler._send_error_message(
-                    bot=bot_handler_context.fake_bot,
-                    chat_id=FAKE_CHAT_ID,
-                    err_message="fake err message",
+                bot_handler._respond_to_update(
+                    bot=bot_handler_context.fake_bot, update=FAKE_UPDATE
                 )
                 for _ in range(total_tasks)
             )

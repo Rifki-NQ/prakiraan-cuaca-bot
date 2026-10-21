@@ -7,6 +7,7 @@ from datetime import timedelta
 from telegram import Bot, Update
 from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 
+from src.bot.bot_user_lock import BotUserLock
 from src.exceptions import (
     BotHandlerError,
     EmptyMessageTextError,
@@ -42,11 +43,13 @@ class BotHandler:
         bot_state: BotStateHandlerProtocol,
         global_throttler: GlobalRespondThrottlerProtocol,
         user_throttler: UserRespondThrottlerProtocol,
+        bot_user_lock: BotUserLock,
     ) -> None:
         self.respond_handler = respond_handler
         self.bot_state = bot_state
         self.global_throttler = global_throttler
         self.user_throttler = user_throttler
+        self.bot_user_lock = bot_user_lock
         self._active_tasks: set[asyncio.Task[None]] = set()
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
         self._bot_is_running = False
@@ -163,16 +166,19 @@ class BotHandler:
         Parse the update object then pass it into BotRespondHandler,
         after that, send the respond message with retry mechanism.
         """
-        async with self._semaphore:
-            update_context = self._parse_update(update)
-            if update_context is None:
-                logger.info("Skip responding to non Message context")
-                return
-            logger.info(
-                f"chat_id: ({update_context.chat_id}), "
-                f"command: ({update_context.command}), "
-                f"command_value: ({update_context.command_value})"
-            )
+        update_context = self._parse_update(update)
+        if update_context is None:
+            logger.info("Skip responding to non Message context")
+            return
+        logger.info(
+            f"chat_id: ({update_context.chat_id}), "
+            f"command: ({update_context.command}), "
+            f"command_value: ({update_context.command_value})"
+        )
+        async with (
+            self.bot_user_lock.user_lock(update_context.chat_id),
+            self._semaphore,
+        ):
             respond_message = await self.respond_handler.parse_command(
                 chat_id=update_context.chat_id,
                 command=update_context.command,
@@ -195,7 +201,7 @@ class BotHandler:
         self, bot: Bot, chat_id: int, err_message: str
     ) -> None:
         """Send an error message to user."""
-        async with self._semaphore:
+        async with self.bot_user_lock.user_lock(chat_id), self._semaphore:
             await self._send_message_with_retry(bot, chat_id, err_message)
 
     async def _send_message_with_retry(
