@@ -1,11 +1,9 @@
 # pyright: reportPrivateUsage=false
 import pytest
 import pytest_asyncio
-from dotenv import load_dotenv
 
 from src.bot.location_flow_handler import LocationFlowHandler
 from src.exceptions import DataIntegrityError
-from src.main import get_env
 from src.models.domain_model import (
     BotUserModel,
     BotUserStateModel,
@@ -15,15 +13,11 @@ from src.models.domain_model import (
 from src.models.enums import UserStateCheckLevel
 from src.queries.sqlite_query import LocationFinder
 
-load_dotenv()
-local_db_url = get_env("TEST_LOCAL_DATABASE_URL")
 FAKE_CHAT_ID = 123
 
 
 @pytest_asyncio.fixture
-async def location_flow_handler() -> LocationFlowHandler:
-    location_finder = LocationFinder()
-    await location_finder.setup_local_db(local_db_url)
+async def location_flow_handler(location_finder: LocationFinder) -> LocationFlowHandler:
     return LocationFlowHandler(location_finder)
 
 

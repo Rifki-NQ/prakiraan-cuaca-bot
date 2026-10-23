@@ -87,7 +87,6 @@ These are only needed to run the integration tests. Point them at **separate** d
 | Variable | Description |
 | --- | --- |
 | `TEST_DATABASE_URL` | PostgreSQL connection string for the test database. |
-| `TEST_LOCAL_DATABASE_URL` | SQLite connection string for the test location database. |
 
 ### Connection string format
 
@@ -160,7 +159,7 @@ Tests are split by two pytest markers:
 
 | Marker | Meaning |
 | --- | --- |
-| `integration` | Runs against a real database, so it needs `TEST_DATABASE_URL` and `TEST_LOCAL_DATABASE_URL` (see [Environment Variables](#environment-variables)). |
+| `integration` | Runs against a real database, so it needs `TEST_DATABASE_URL` (see [Environment Variables](#environment-variables)). |
 | `prod_db` | Hits the **production** database directly. It reads and creates tables but never drops them. |
 
 Tests without a marker are unit tests. They run against mocks in place of the databases and Telegram, because each layer depends on protocols instead of concrete classes, so they need no database setup.
