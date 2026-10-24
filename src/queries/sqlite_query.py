@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlalchemy import Column, MetaData, Row, String, Table, insert, select
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.exceptions import DBNotInitializedError, EmptyQueryResultError
 from src.models.contexts import LocalDBContext
@@ -133,24 +133,14 @@ class LocationFinder:
         """
         db = self._get_local_db()
         logger.info("csv to local db transformation started")
-        async with db.engine.begin() as conn:
-            for csv_row in self._get_rows_from_csv(csv_filepath):
-                await self._insert_or_ignore_location(conn, db.location_table, csv_row)
-        logger.info("csv to local db transformation finished")
-
-    async def _insert_or_ignore_location(
-        self, conn: AsyncConnection, table: Table, insert_value: CSVLocationDataModel
-    ) -> None:
-        """
-        Insert or ignore the forecast_location table,
-        using sqlite specific 'OR IGNORE' dialect to ignore the conflicting row.
-        """
-        stmt = insert(table).prefix_with("OR IGNORE").values(**insert_value.as_dict())
-        result = await conn.execute(stmt)
-        if result.rowcount > 0:
-            logger.debug(f"row {insert_value.kode_adm4} inserted")
+        rows = [r.as_dict() for r in self._get_rows_from_csv(csv_filepath)]
+        if not rows:
+            logger.warning("empty csv rows to insert into the local db")
             return
-        logger.debug(f"row {insert_value.kode_adm4} ignored")
+        async with db.engine.begin() as conn:
+            stmt = insert(db.location_table).prefix_with("OR IGNORE")
+            await conn.execute(stmt, rows)
+        logger.info("csv to local db transformation finished")
 
     def _get_rows_from_csv(self, csv_filepath: Path) -> Iterable[CSVLocationDataModel]:
         """

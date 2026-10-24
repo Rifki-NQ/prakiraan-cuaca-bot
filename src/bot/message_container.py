@@ -9,7 +9,7 @@ def escape_html(value: str | None) -> str | None:
     return None
 
 
-def add_unit(value: int | float | None, unit: str) -> str:
+def add_unit(value: float | None, unit: str) -> str:
     if value is not None:
         return f"{value}{unit}"
     return "No data"
