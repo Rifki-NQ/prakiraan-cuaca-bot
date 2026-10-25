@@ -21,9 +21,11 @@ class FakeBotStateHandler:
             return 1
         return None
 
-    async def store_offset(self, bot_token: str, offset: int) -> None:
+    async def store_offset(
+        self, bot_token: str, offset: int, force_store: bool = False
+    ) -> None:
         self.called_methods.append(self.store_offset)
-        self.called_methods_args[self.store_offset] = [bot_token, offset]
+        self.called_methods_args[self.store_offset] = [bot_token, offset, force_store]
 
     def assert_called_once_with(
         self, method: Callable[..., Any], args: list[Any] | None = None

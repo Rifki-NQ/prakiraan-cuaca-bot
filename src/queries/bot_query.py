@@ -55,14 +55,14 @@ class BotQuery:
             result = await conn.execute(stmt)
             return result.fetchone()
 
-    async def insert_or_update_bot_offset(
-        self, bot_token: str, offset: int, update_time: datetime
-    ) -> None:
+    async def insert_or_update_bot_offset(self, bot_token: str, offset: int) -> None:
         """Insert or update bot_offset data except the pk."""
         db = self._get_db()
         async with db.engine.begin() as conn:
             stmt = insert(db.bot_offset_table).values(
-                bot_token=bot_token, offset=offset, updated_at=update_time
+                bot_token=bot_token,
+                offset=offset,
+                updated_at=self._get_current_datetime(),
             )
             pk_names = {pk.name for pk in db.bot_offset_table.primary_key.c}
             upsert_stmt = stmt.on_conflict_do_update(

@@ -1,5 +1,4 @@
 from collections.abc import AsyncGenerator
-from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -154,14 +153,13 @@ async def test_insert_or_update_bot_offset_without_conflict(
     """
     caplog.set_level(10)  # DEBUG level
     await bot_query.insert_or_update_bot_offset(
-        bot_token="new_fake_bot_token", offset=10, update_time=datetime(2026, 10, 10)
+        bot_token="new_fake_bot_token", offset=10
     )
     assert "bot_offset commited to db" in caplog.messages[0]
     result = await bot_query.get_bot_offset("new_fake_bot_token")
     assert result is not None
     assert result.bot_token == "new_fake_bot_token"
     assert result.offset == 10
-    assert result.updated_at == datetime(2026, 10, 10)
 
 
 async def test_insert_or_update_bot_offset_with_conflict(
@@ -177,14 +175,12 @@ async def test_insert_or_update_bot_offset_with_conflict(
             "bot_token"  # the conflicting PK
         ],
         offset=10,  # different value from seeded mocked_data
-        update_time=datetime(2026, 10, 10),  # different value from seeded mocked_data
     )
     assert "bot_offset commited to db" in caplog.messages[0]
     result = await bot_query.get_bot_offset(MOCK_BOT_OFFSET_DATA["bot_token"])
     assert result is not None
     assert result.bot_token == MOCK_BOT_OFFSET_DATA["bot_token"]
     assert result.offset == 10
-    assert result.updated_at == datetime(2026, 10, 10)
 
 
 async def test_insert_or_updated_user_without_conflict(
