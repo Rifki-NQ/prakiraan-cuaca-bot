@@ -480,7 +480,20 @@ class TestStartPollingLoop:
         mock_poll_once.assert_awaited_once_with(
             bot_handler_context.fake_bot, FAKE_CURRENT_OFFSET
         )
-        mock_store_offset.assert_awaited_once_with(FAKE_BOT_TOKEN, FAKE_CURRENT_OFFSET)
+        # assert that there is two store_offset() calls
+        assert len(mock_store_offset.call_args_list) == 2, (
+            "there should be two calls of store_offset() in this test case, "
+            "first is inside the polling loop "
+            "and second is on shutdown or when the polling loop exits"
+        )
+        # test the store_offset() call inside the polling loop
+        mock_store_offset.call_args_list[0].assert_awaited_once_with(
+            FAKE_BOT_TOKEN, FAKE_CURRENT_OFFSET
+        )
+        # test the store_offset() call inside the finally branch (when polling loop ends)
+        mock_store_offset.call_args_list[1].assert_awaited_once_with(
+            FAKE_BOT_TOKEN, FAKE_CURRENT_OFFSET, force_store=True
+        )
         mock_drain_tasks.assert_awaited_once()
 
     async def test_drain_tasks_still_called_when_poll_once_raised_error(
@@ -499,6 +512,33 @@ class TestStartPollingLoop:
                 await bot_handler._start_polling_loop(
                     bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
                 )
+        mock_drain_tasks.assert_awaited_once()
+
+    async def test_drain_tasks_still_called_when_shutdown_store_offset_raised_error(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        """
+        Test that self._drain_tasks() is still called when on shutdown,
+        bot_state.store_offset() raised an error
+        """
+        bot_handler = bot_handler_context.bot_handler
+
+        async def _flips_bot_running_state(*args: Any, **kwargs: Any) -> None:
+            nonlocal bot_handler
+            bot_handler._bot_is_running = False
+
+        bot_handler = bot_handler_context.bot_handler
+        with (
+            patch.object(
+                bot_handler.bot_state,
+                "store_offset",
+                side_effect=[_flips_bot_running_state, FakeError("fake error")],
+            ),
+            patch.object(bot_handler, "_drain_tasks") as mock_drain_tasks,
+        ):
+            await bot_handler._start_polling_loop(
+                bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
+            )
         mock_drain_tasks.assert_awaited_once()
 
     async def test_drain_tasks_still_called_when_store_offset_raised_error(

@@ -113,21 +113,27 @@ class BotHandler:
         self, bot_token: str, current_offset: int | None
     ) -> None:
         """
-        Start the bot long polling loop,
-        persist the offset whenever get_updates return update objects.
+        Start the long polling, set offset to -1 (only proceed the latest update)
+        when the current_offset is None.
+        On shutdown or when the polling loop ended, store the latest offset
+        then drain the remaining tasks.
         """
+        current_offset = current_offset if current_offset is not None else -1
         async with Bot(bot_token) as bot:
-            if current_offset is None:
-                # if current_offset does not exist in the db
-                # set it to -1 so it will only proceed the latest update
-                current_offset = -1
             logger.info("Bot long polling loop started")
             try:
                 while self._bot_is_running:
                     current_offset = await self._poll_once(bot, current_offset)
                     await self.bot_state.store_offset(bot_token, current_offset)
             finally:
-                await self._drain_tasks()
+                # forcefully store the offset when the bot is going to shutdown
+                try:
+                    if current_offset != -1:  # skip storing -1 to the db
+                        await self.bot_state.store_offset(
+                            bot_token, current_offset, force_store=True
+                        )
+                finally:
+                    await self._drain_tasks()
 
     async def _drain_tasks(self) -> None:
         """
