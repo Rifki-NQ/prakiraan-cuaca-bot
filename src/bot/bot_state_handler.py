@@ -27,7 +27,7 @@ class BotStateHandler:
         if offset is None:
             logger.info("query returned empty row of bot_offset")
             return None
-        return offset.offset if offset.offset is not None else None
+        return offset.offset or None
 
     async def store_offset(
         self, bot_token: str, offset: int, force_store: bool = False
@@ -40,7 +40,7 @@ class BotStateHandler:
         if self._can_run(current) or force_store:
             self._next_offset_store = current + self.OFFSET_STORE_INTERVAL
             await self.query.insert_or_update_bot_offset(bot_token, offset)
-            logger.debug(f"offset stored: (bot_token: {bot_token}, offset: {offset})")
+            logger.debug(f"offset stored: {offset}")
 
     def _can_run(self, current: float) -> bool:
         return bool(
