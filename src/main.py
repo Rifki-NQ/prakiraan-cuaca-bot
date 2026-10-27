@@ -75,12 +75,9 @@ async def run_app(
 ) -> None:
     args = parser.parse_args()
 
-    etl_query = ETLQuery()
-    bot_query = BotQuery()
-    location_finder = LocationFinder()
-    await etl_query.setup_etl_db(etl_db_url)
-    await bot_query.setup_bot_db(bot_db_url)
-    await location_finder.setup_local_db(local_db_url)
+    etl_query = ETLQuery(etl_db_url)
+    bot_query = BotQuery(bot_db_url)
+    location_finder = LocationFinder(local_db_url)
     if args.build_local_db:
         await location_finder.start_csv_to_local_db_transformation(
             Path("adm4_codes/jawa_barat.csv")
@@ -99,7 +96,8 @@ async def run_app(
         user_rate_limiter,
         bot_user_lock,
     )
-    await bot_handler.run_bot(bot_token)
+    async with etl_query, bot_query, location_finder:
+        await bot_handler.run_bot(bot_token)
 
 
 def main() -> None:

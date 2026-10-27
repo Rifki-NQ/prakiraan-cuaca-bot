@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 from sqlalchemy import (
     BigInteger,
@@ -25,19 +26,24 @@ logger = logging.getLogger(__name__)
 
 
 class BotQuery:
-    def __init__(self) -> None:
-        self._db: BotDBContext | None = None
+    def __init__(self, bot_db_url: str) -> None:
+        self.bot_db_url = bot_db_url
+        self._bot_db: BotDBContext | None = None
 
-    async def setup_bot_db(self, db_url: str) -> None:
-        """Must be called first before any other method."""
-        engine = create_async_engine(db_url, pool_pre_ping=True)
-        metadata = MetaData()
-        bot_offset_table = self._define_bot_offset_table(metadata)
-        bot_user_table = self._define_bot_user_table(metadata)
-        bot_user_state_table = self._define_bot_user_state_table(metadata)
-        async with engine.begin() as conn:
-            await conn.run_sync(metadata.create_all)
-        self._db = BotDBContext(
+    async def _setup_bot_db(self) -> None:
+        """Should only be called in __aenter__() (as async context manager)"""
+        engine = create_async_engine(self.bot_db_url, pool_pre_ping=True)
+        try:
+            metadata = MetaData()
+            bot_offset_table = self._define_bot_offset_table(metadata)
+            bot_user_table = self._define_bot_user_table(metadata)
+            bot_user_state_table = self._define_bot_user_state_table(metadata)
+            async with engine.begin() as conn:
+                await conn.run_sync(metadata.create_all)
+        except BaseException:
+            await engine.dispose()
+            raise
+        self._bot_db = BotDBContext(
             engine=engine,
             bot_offset_table=bot_offset_table,
             bot_user_table=bot_user_table,
@@ -45,9 +51,32 @@ class BotQuery:
         )
         logger.debug("setup_bot_db() executed")
 
+    async def _close_bot_db(self) -> None:
+        """Should only be called in __aexit__() (as async context manager)"""
+        if self._bot_db is None:
+            logger.warning("bot db is already closed")
+            return
+        try:
+            await self._get_bot_db().engine.dispose()
+        finally:
+            self._bot_db = None
+            logger.debug("bot db closed")
+
+    async def __aenter__(self) -> Self:
+        await self._setup_bot_db()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self._close_bot_db()
+
     async def get_bot_offset(self, bot_token: str) -> Row[Any] | None:
         """Get or select bot_offset data if it exists."""
-        db = self._get_db()
+        db = self._get_bot_db()
         async with db.engine.connect() as conn:
             stmt = select(db.bot_offset_table).where(
                 db.bot_offset_table.c.bot_token == bot_token
@@ -57,7 +86,7 @@ class BotQuery:
 
     async def insert_or_update_bot_offset(self, bot_token: str, offset: int) -> None:
         """Insert or update bot_offset data except the pk."""
-        db = self._get_db()
+        db = self._get_bot_db()
         async with db.engine.begin() as conn:
             stmt = insert(db.bot_offset_table).values(
                 bot_token=bot_token,
@@ -78,7 +107,7 @@ class BotQuery:
 
     async def get_user(self, chat_id: int) -> Row[Any] | None:
         """Get or select user data if it exists."""
-        db = self._get_db()
+        db = self._get_bot_db()
         async with db.engine.connect() as conn:
             stmt = select(*self._exclude_timestamp_columns(db.bot_user_table)).where(
                 db.bot_user_table.c.chat_id == chat_id
@@ -91,7 +120,7 @@ class BotQuery:
         Insert user data into the table or update if it conflicts,
         update all columns on conflict except the table pk and the 'created_at' column.
         """
-        db = self._get_db()
+        db = self._get_bot_db()
         current_dt = self._get_current_datetime()
         pk_names = {pk.name for pk in db.bot_user_table.primary_key.c}
         excluded_columns = {"created_at", *pk_names}
@@ -121,7 +150,7 @@ class BotQuery:
 
     async def get_user_state(self, chat_id: int) -> Row[Any] | None:
         """Get or select user state data if it exists."""
-        db = self._get_db()
+        db = self._get_bot_db()
         async with db.engine.connect() as conn:
             stmt = select(
                 *self._exclude_timestamp_columns(db.bot_user_state_table)
@@ -136,7 +165,7 @@ class BotQuery:
         Insert user state data into the table or update if it conflicts,
         update all columns on conflict except the table pk and the 'created_at' column.
         """
-        db = self._get_db()
+        db = self._get_bot_db()
         current_dt = self._get_current_datetime()
         pk_names = {pk.name for pk in db.bot_user_state_table.primary_key.c}
         excluded_columns = {"created_at", *pk_names}
@@ -171,11 +200,11 @@ class BotQuery:
         current_datetime = datetime.now(tz=BOT_DATETIME)
         return current_datetime.replace(tzinfo=None)
 
-    def _get_db(self) -> BotDBContext:
+    def _get_bot_db(self) -> BotDBContext:
         """get the db attributes, can be called after setup_bot_db()."""
-        if self._db is None:
+        if self._bot_db is None:
             raise DBNotInitializedError("setup_db() has not called yet")
-        return self._db
+        return self._bot_db
 
     def _exclude_timestamp_columns(self, table: Table) -> set[Column[Any]]:
         """

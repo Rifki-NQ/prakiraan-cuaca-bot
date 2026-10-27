@@ -2,7 +2,8 @@ import csv
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, cast
+from types import TracebackType
+from typing import Any, Self, cast
 
 from sqlalchemy import Column, MetaData, Row, String, Table, insert, select
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -22,22 +23,49 @@ class LocationFinder:
     With an additional transformation method to turn a .csv file into .db local database.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, local_db_url: str) -> None:
+        self.local_db_url = local_db_url
         self._local_db: LocalDBContext | None = None
 
-    # TODO: handle when db folder destination does not exist yet
-    async def setup_local_db(self, db_url: str) -> None:
-        """Must be called once before any other method."""
+    async def _setup_local_db(self) -> None:
+        """Should only be called in __aenter__() (as async context manager)"""
         if self._local_db is not None:
-            logger.warning("setup_local_db() already called")
+            logger.warning("setup_local_db() is already called")
             return
-        engine = create_async_engine(db_url)
-        metadata = MetaData()
-        location_table = self._define_location_table(metadata)
-        async with engine.begin() as conn:
-            await conn.run_sync(metadata.create_all)
+        engine = create_async_engine(self.local_db_url)
+        try:
+            metadata = MetaData()
+            location_table = self._define_location_table(metadata)
+            async with engine.begin() as conn:
+                await conn.run_sync(metadata.create_all)
+        except BaseException:
+            await engine.dispose()
+            raise
         self._local_db = LocalDBContext(engine=engine, location_table=location_table)
         logger.debug("setup_local_db() executed")
+
+    async def _close_local_db(self) -> None:
+        """Should only be called in __aexit__() (as async context manager)"""
+        if self._local_db is None:
+            logger.warning("local db is already closed")
+            return
+        try:
+            await self._get_local_db().engine.dispose()
+        finally:
+            self._local_db = None
+            logger.debug("local db closed")
+
+    async def __aenter__(self) -> Self:
+        await self._setup_local_db()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self._close_local_db()
 
     async def search_city_or_regency(self, city_or_regency: str) -> list[str]:
         """List all possible cities or regencies based of the given 'city_or_regency' value."""

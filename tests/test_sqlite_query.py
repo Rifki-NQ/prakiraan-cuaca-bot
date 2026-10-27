@@ -1,6 +1,6 @@
 import csv
-import logging
 from collections.abc import AsyncGenerator
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -14,16 +14,8 @@ from tests.paths import adm4_codes_csv_path, temp_local_db_path
 from tests.tests_utils import get_tables_name
 
 
-async def test_second_setup_local_db(
-    location_finder: LocationFinder, caplog: pytest.LogCaptureFixture
-) -> None:
-    caplog.set_level(logging.WARNING)
-    await location_finder.setup_local_db("")
-    assert "already called" in caplog.messages[0]
-
-
 async def test_get_local_db_without_setup_first() -> None:
-    location_finder = LocationFinder()
+    location_finder = LocationFinder(local_db_url="fake local db url")
     with pytest.raises(DBNotInitializedError):
         location_finder._get_local_db()  # pyright: ignore[reportPrivateUsage]
 
@@ -31,7 +23,7 @@ async def test_get_local_db_without_setup_first() -> None:
 async def test_local_db_attributes_after_setup_local_db(
     location_finder: LocationFinder,
 ) -> None:
-    # setup_local_db() is already called in the location_finder fixture
+    # setup is done in the location_finder fixture
     local_db = location_finder._get_local_db()  # pyright: ignore[reportPrivateUsage]
     assert local_db is not None
     assert isinstance(local_db, LocalDBContext)
@@ -43,24 +35,56 @@ async def test_local_db_attributes_after_setup_local_db(
 async def test_setup_local_db_create_table_in_db(
     location_finder: LocationFinder,
 ) -> None:
-    # setup_local_db() is already called in the location_finder fixture
+    # setup is done in the location_finder fixture
     local_db = location_finder._get_local_db()  # pyright: ignore[reportPrivateUsage]
     table_names_from_db = await get_tables_name(local_db.engine)
     assert local_db.location_table.name in table_names_from_db
 
 
+class TestAsAsyncContextManager:
+    class FakeError(Exception):
+        """Fake error exception for testing purpose"""
+
+    @pytest.fixture
+    def location_finder(self) -> LocationFinder:
+        return LocationFinder(local_db_url="fake local db url")
+
+    async def test_setup_and_close_methods_called(
+        self, location_finder: LocationFinder
+    ) -> None:
+        with (
+            patch.object(location_finder, "_setup_local_db") as mock_setup_method,
+            patch.object(location_finder, "_close_local_db") as mock_close_method,
+        ):
+            async with location_finder:
+                pass
+        mock_setup_method.assert_awaited_once()
+        mock_close_method.assert_awaited_once()
+
+    async def test_close_method_called_when_error_raised(
+        self, location_finder: LocationFinder
+    ) -> None:
+        with (
+            patch.object(location_finder, "_setup_local_db"),
+            patch.object(location_finder, "_close_local_db") as mock_close_method,
+            pytest.raises(self.FakeError),
+        ):
+            async with location_finder:
+                raise self.FakeError()
+        mock_close_method.assert_awaited_once()
+
+
 class TestStartCsvToLocalDBTransformation:
     @pytest_asyncio.fixture()
     async def fresh_location_finder(self) -> AsyncGenerator[LocationFinder, None]:
-        location_finder = LocationFinder()
         db_file_url = temp_local_db_path(db_file_name="fresh_temp_database.db")
         db_url = f"sqlite+aiosqlite:///{db_file_url}"
-        await location_finder.setup_local_db(db_url)
-        await location_finder.start_csv_to_local_db_transformation(
-            adm4_codes_csv_path()
-        )
-        yield location_finder
-        await location_finder._get_local_db().engine.dispose()  # pyright: ignore[reportPrivateUsage]
+        location_finder = LocationFinder(local_db_url=db_url)
+        async with location_finder:
+            await location_finder.start_csv_to_local_db_transformation(
+                adm4_codes_csv_path()
+            )
+            yield location_finder
         db_file_url.unlink()
 
     async def test_table_exists(

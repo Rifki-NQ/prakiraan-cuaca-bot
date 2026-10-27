@@ -2,7 +2,8 @@ import asyncio
 import logging
 from collections.abc import AsyncIterable
 from datetime import datetime
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 from sqlalchemy import (
     MetaData,
@@ -25,22 +26,53 @@ logger = logging.getLogger(__name__)
 class ETLQuery:
     RESULT_YIELD_PER_VALUE = 24  # server-side rows-per-yield streaming value
 
-    def __init__(self) -> None:
-        self._db: ETLDBContext | None = None
+    def __init__(self, etl_db_url: str) -> None:
+        self.etl_db_url = etl_db_url
+        self._etl_db: ETLDBContext | None = None
 
-    async def setup_etl_db(self, db_url: str) -> None:
-        """Must be called first before any other method."""
-        engine = create_async_engine(db_url, pool_pre_ping=True)
-        metadata = MetaData()
-        async with engine.begin() as conn:
-            await conn.run_sync(metadata.reflect)
-            await conn.run_sync(metadata.create_all)
-        self._db = ETLDBContext(
+    async def _setup_etl_db(self) -> None:
+        """Should only be called in __aenter__() (as async context manager)"""
+        if self._etl_db is not None:
+            logger.warning("setup_etl_db() is already called")
+            return
+        engine = create_async_engine(self.etl_db_url, pool_pre_ping=True)
+        try:
+            metadata = MetaData()
+            async with engine.begin() as conn:
+                await conn.run_sync(metadata.reflect)
+                await conn.run_sync(metadata.create_all)
+        except BaseException:
+            await engine.dispose()
+            raise
+        self._etl_db = ETLDBContext(
             engine=engine,
             location_table=metadata.tables["forecast_location"],
             forecast_table=metadata.tables["weather_forecast"],
         )
         logger.debug("setup_etl_db() executed")
+
+    async def _close_etl_db(self) -> None:
+        """Should only be called in __aexit__() (as async context manager)"""
+        if self._etl_db is None:
+            logger.warning("etl db is already closed")
+            return
+        try:
+            await self._get_etl_db().engine.dispose()
+        finally:
+            self._etl_db = None
+            logger.debug("etl db closed")
+
+    async def __aenter__(self) -> Self:
+        await self._setup_etl_db()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self._close_etl_db()
 
     async def get_forecast_by_range(
         self, adm4_code: str, datetime_range: tuple[datetime, datetime]
@@ -56,7 +88,7 @@ class ETLQuery:
             while giving the event loop control with: await asyncio.sleep(0),
             raise error if total yielded is 0.
             """
-            db = self._get_db()
+            db = self._get_etl_db()
             async with db.engine.connect() as conn:
                 stmt = (
                     select(db.forecast_table)
@@ -88,8 +120,8 @@ class ETLQuery:
 
         return _results()
 
-    def _get_db(self) -> ETLDBContext:
+    def _get_etl_db(self) -> ETLDBContext:
         """get the db attributes, can be called after setup_etl_db()."""
-        if self._db is None:
-            raise DBNotInitializedError("setup_db() has not called yet")
-        return self._db
+        if self._etl_db is None:
+            raise DBNotInitializedError("setup_etl_db() has not called yet")
+        return self._etl_db

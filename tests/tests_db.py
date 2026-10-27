@@ -53,14 +53,14 @@ class ETLTestDB:
 
     async def seed_forecast_test_table(self, mocked_data: list[dict[str, Any]]) -> None:
         """Insert the weather_forecast table with mocked data."""
-        db = self._get_db()
+        db = self._get_etl_db()
         async with db.engine.begin() as conn:
             stmt = insert(db.forecast_table).on_conflict_do_nothing()
             await conn.execute(stmt, self._normalize_forecast_mock_data(mocked_data))
         logger.debug("mocked_data for forecast_table inserted")
 
     async def seed_location_test_table(self, mocked_data: dict[str, Any]) -> None:
-        db = self._get_db()
+        db = self._get_etl_db()
         async with db.engine.begin() as conn:
             stmt = (
                 insert(db.location_table).on_conflict_do_nothing().values(mocked_data)
@@ -68,7 +68,7 @@ class ETLTestDB:
             await conn.execute(stmt)
         logger.debug("mocked_data for location_table inserted")
 
-    def _get_db(self) -> ETLTestDBContext:
+    def _get_etl_db(self) -> ETLTestDBContext:
         if self._db is None:
             raise DBNotInitializedError("setup_test_db() has not called yet")
         return self._db
@@ -125,7 +125,7 @@ class BotTestDB:
         mocked_bot_user_data: dict[str, Any],
         mock_bot_user_state_data: dict[str, Any],
     ) -> None:
-        db = self._get_db()
+        db = self._get_bot_db()
         table_and_mock_data = {
             db.bot_offset_table: mocked_bot_offset_data,
             db.bot_user_table: mocked_bot_user_data,
@@ -137,7 +137,7 @@ class BotTestDB:
                 await conn.execute(stmt)
         logger.info("mocked_data for bot test tables inserted")
 
-    def _get_db(self) -> BotTestDBContext:
+    def _get_bot_db(self) -> BotTestDBContext:
         if self._db is None:
             raise DBNotInitializedError("setup_test_db() has not called yet")
         return self._db
