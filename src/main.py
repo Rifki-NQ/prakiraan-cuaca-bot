@@ -78,10 +78,6 @@ async def run_app(
     etl_query = ETLQuery(etl_db_url)
     bot_query = BotQuery(bot_db_url)
     location_finder = LocationFinder(local_db_url)
-    if args.build_local_db:
-        await location_finder.start_csv_to_local_db_transformation(
-            Path("adm4_codes/jawa_barat.csv")
-        )
     bot_service = BotService(etl_query, bot_query)
     bot_rate_limiter = GlobalRespondThrottler(limit=29, limit_reset_interval=1)
     user_rate_limiter = UserRespondThrottler(response_cooldown=1)
@@ -97,6 +93,10 @@ async def run_app(
         bot_user_lock,
     )
     async with etl_query, bot_query, location_finder:
+        if args.build_local_db:
+            await location_finder.start_csv_to_local_db_transformation(
+                Path("adm4_codes/jawa_barat.csv")
+            )
         await bot_handler.run_bot(bot_token)
 
 
