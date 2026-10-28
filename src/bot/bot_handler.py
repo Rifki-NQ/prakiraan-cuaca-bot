@@ -123,7 +123,11 @@ class BotHandler:
             logger.info("Bot long polling loop started")
             try:
                 while self._bot_is_running:
-                    current_offset = await self._poll_once(bot, current_offset)
+                    new_offset = await self._poll_once(bot, current_offset)
+                    # avoid storing the same offset to the database
+                    if new_offset == current_offset:
+                        continue
+                    current_offset = new_offset
                     await self.bot_state.store_offset(bot_token, current_offset)
             finally:
                 # forcefully store the offset when the bot is going to shutdown

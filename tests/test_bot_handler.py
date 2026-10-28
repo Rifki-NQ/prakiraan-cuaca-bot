@@ -465,7 +465,11 @@ class TestStartPollingLoop:
 
         with (
             patch.object(
-                bot_handler, "_poll_once", wraps=bot_handler._poll_once
+                # return_value=1 avoids skipping the call to store_offset() in the loop
+                bot_handler,
+                "_poll_once",
+                wraps=bot_handler._poll_once,
+                return_value=1,
             ) as mock_poll_once,
             patch.object(bot_handler, "_drain_tasks") as mock_drain_tasks,
             patch.object(
@@ -514,33 +518,6 @@ class TestStartPollingLoop:
                 )
         mock_drain_tasks.assert_awaited_once()
 
-    async def test_drain_tasks_still_called_when_shutdown_store_offset_raised_error(
-        self, bot_handler_context: BotHandlerContext
-    ) -> None:
-        """
-        Test that self._drain_tasks() is still called when on shutdown,
-        bot_state.store_offset() raised an error
-        """
-        bot_handler = bot_handler_context.bot_handler
-
-        async def _flips_bot_running_state(*args: Any, **kwargs: Any) -> None:
-            nonlocal bot_handler
-            bot_handler._bot_is_running = False
-
-        bot_handler = bot_handler_context.bot_handler
-        with (
-            patch.object(
-                bot_handler.bot_state,
-                "store_offset",
-                side_effect=[_flips_bot_running_state, FakeError("fake error")],
-            ),
-            patch.object(bot_handler, "_drain_tasks") as mock_drain_tasks,
-        ):
-            await bot_handler._start_polling_loop(
-                bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
-            )
-        mock_drain_tasks.assert_awaited_once()
-
     async def test_drain_tasks_still_called_when_store_offset_raised_error(
         self, bot_handler_context: BotHandlerContext
     ) -> None:
@@ -548,6 +525,13 @@ class TestStartPollingLoop:
         bot_handler._bot_is_running = True
 
         with (
+            patch.object(
+                # return_value=1 avoids skipping the call to store_offset() in the loop
+                bot_handler,
+                "_poll_once",
+                wraps=bot_handler._poll_once,
+                return_value=1,
+            ),
             patch.object(
                 bot_handler.bot_state,
                 "store_offset",
@@ -560,6 +544,30 @@ class TestStartPollingLoop:
                     bot_token=FAKE_BOT_TOKEN, current_offset=FAKE_CURRENT_OFFSET
                 )
         mock_drain_tasks.assert_awaited_once()
+
+    async def test_store_offset_skipped_when_poll_once_return_the_same_offset(
+        self, bot_handler_context: BotHandlerContext
+    ) -> None:
+        """
+        Test that store_offset() is not called when the 'new_offset'
+        returned by _poll_once() is the same as 'current_offset',
+        the 'current_offset' need to be -1 here in this case
+        because if it's not -1, the store_offset() in finally
+        branch (on shutdown) will be called
+        """
+        bot_handler = bot_handler_context.bot_handler
+        bot_handler._bot_is_running = True
+
+        with (
+            patch.object(bot_handler, "_poll_once", side_effect=[-1, StopLoop()]),
+            patch.object(bot_handler.bot_state, "store_offset") as mock_store_offset,
+            suppress(StopLoop),
+        ):
+            await bot_handler._start_polling_loop(
+                bot_token=FAKE_BOT_TOKEN,
+                current_offset=-1,  # same with the return_value of patched _poll_once()
+            )
+        mock_store_offset.assert_not_awaited()
 
     async def test_when_current_offset_is_none(
         self, bot_handler_context: BotHandlerContext
