@@ -82,7 +82,7 @@ cp .env.example .env
 
 ### Optional (for testing)
 
-These are only needed to run the integration tests. Point them at **separate** databases, never your production ones.
+This is only needed to run the integration tests. Point them at **separate** databases, never your production ones.
 
 | Variable | Description |
 | --- | --- |
@@ -249,6 +249,7 @@ Located in [`src/bot`](src/bot), this layer sits at the top of the stack and han
 
   Both delay replies instead of dropping them, and both run a background task (a counter reset for the global throttler, stale data cleanup for the user throttler) that must be started before use and stopped on shutdown.
 - [`bot_state_handler.py`](src/bot/bot_state_handler.py): reads and saves the bot's Telegram update offset through `bot_query`, so polling can resume after a restart. Saves are throttled to once every 30 seconds to avoid writing to the database after every poll, so after a crash the bot may reprocess a few recent updates.
+- [`bot_user_lock.py`](src/bot/bot_user_lock.py): provides a per-chat `asyncio.Lock` so requests from the same chat are handled one at a time (later ones wait their turn) instead of concurrently, preventing corrupted state. Requests from different chats still run in parallel. Locks are stored in a [`weakref.WeakValueDictionary`](https://docs.python.org/3/library/weakref.html#weakref.WeakValueDictionary), so a lock is discarded automatically once no request is holding or waiting on it
 - [`bot_utils.py`](src/bot/bot_utils.py): small shared helpers for the bot layer. `get_user_data_or_raise` checks that a user and their `adm4_code` exist, and otherwise raises a `DataIntegrityError` that asks the user to re-enter their location. `merge_messages` joins several message strings into one reply, separated by blank lines.
 - [`message_container.py`](src/bot/message_container.py): holds every user-facing message as constants or small formatter functions. This covers the intro, help texts, location prompts and confirmations, error replies, and the forecast layout. Messages use Telegram's HTML formatting.
 
