@@ -1,12 +1,34 @@
 # prakiraan-cuaca-bot
 
-A Telegram bot that provides BMKG weather forecasts for areas in Jawa Barat. It consumes the data produced by [indo-weather-etl](https://github.com/Rifki-NQ/indo-weather-etl), which runs on a server.
+A Telegram bot that provides weather forecasts from BMKG (Badan Meteorologi, Klimatologi, dan Geofisika, Indonesia's meteorology agency) for areas in Jawa Barat. It consumes the data produced by [indo-weather-etl](https://github.com/Rifki-NQ/indo-weather-etl), which runs on a server.
+
+> **The bot currently only covers weather forecasts for the Jawa Barat area.**
+
+---
+
+## Quick use and Example
+
+### Try out the bot
+
+[Prakiraan Cuaca Bot in Telegram](https://t.me/prakiraan_cuaca_bot/)
+
+The bot replies in English.
+
+### Screenshot example of the bot
+
+![example.png](example.png)
+
+### Data source and disclaimer
+
+Forecast data comes from [BMKG](https://www.bmkg.go.id/). This project is not affiliated with or endorsed by BMKG. Forecasts are predictions and can differ from actual conditions. For official weather warnings, always check BMKG directly.
 
 ---
 
 ## Table of Contents
 
+- [Quick use and Example](#quick-use-and-example)
 - [Installation](#installation)
+  - [Prerequisites](#prerequisites)
 - [Environment Variables](#environment-variables)
   - [Required](#required)
   - [Optional (for testing)](#optional-for-testing)
@@ -24,12 +46,24 @@ A Telegram bot that provides BMKG weather forecasts for areas in Jawa Barat. It 
   - [Service layer](#service-layer)
   - [Bot layer](#bot-layer)
   - [Models layer](#models-layer)
+- [Run with systemd](#run-with-systemd)
+  - [1. Create the service unit](#1-create-the-service-unit)
+  - [2. Enable the service](#2-enable-the-service)
+  - [3. Verify](#3-verify)
+  - [Updating](#updating)
 
 ---
 
 ## Installation
 
-Requires Python 3.11 or newer.
+### Prerequisites
+
+- Python 3.11 or newer.
+- A Telegram bot token from [@BotFather](https://t.me/BotFather).
+- A PostgreSQL database holding the BMKG forecast data, written by [indo-weather-etl](https://github.com/Rifki-NQ/indo-weather-etl). Set up and run the ETL first, because the bot only reads from it and can't show forecasts without it.
+- A second PostgreSQL database for the bot's own state (see [why they are separate](#query-layer)).
+
+### Steps
 
 ```bash
 # 1. Clone the repository
@@ -82,11 +116,11 @@ cp .env.example .env
 
 ### Optional (for testing)
 
-This is only needed to run the integration tests. Point them at **separate** databases, never your production ones.
+Only needed to run the integration tests. Point it at a **separate** database, never one of your production ones.
 
 | Variable | Description |
 | --- | --- |
-| `TEST_DATABASE_URL` | PostgreSQL connection string for the test database. |
+| `TEST_DATABASE_URL` | PostgreSQL connection string for the test database. <!-- TODO: say whether the ETL and bot test tables both live in this one database --> |
 
 ### Connection string format
 
@@ -120,7 +154,10 @@ run_bot --build-local-db
 >
 > - It converts the CSV file of full location data into a SQLite `.db` file, which the bot uses for user location lookups. **This step is slow and blocks startup until it finishes.**
 > - The CSV must have exactly these columns: `kode_adm4`, `provinsi`, `kabupaten_atau_kota`, `kecamatan`, and `desa_atau_kelurahan`. See [`jawa_barat.csv`](adm4_codes/jawa_barat.csv) for an example.
+> - The folder that will contain the SQLite file (from `LOCAL_DATABASE_URL`) must already exist.
 > - `kode_adm4` is Indonesia's administrative area code, down to the village level. For the full list, see [Kode Wilayah Administrasi Pemerintahan seluruh Indonesia](https://m.nomor.net/_kodepos.php?_i=kode-wilayah).
+
+Run `--build-local-db` once. After the `.db` file exists, start the bot with plain `run_bot`. This also applies when you [run it with systemd](#run-with-systemd).
 
 Logs are written to the `logs/` directory.
 
@@ -129,6 +166,13 @@ Logs are written to the `logs/` directory.
 ## Commands
 
 Before the bot can show a forecast, each user has to set up a location by choosing a city or regency, then a subdistrict, then a village.
+
+A typical setup looks like this:
+
+1. Send `/start`. The bot asks for your city or regency.
+2. Send `/input <city or regency>`, for example `/input kabupaten bekasi`. The bot then asks for the subdistrict.
+3. Send `/input <subdistrict>`, then `/input <village>`. If the name doesn't match, the bot replies with the list of valid choices.
+4. Once the village is chosen, send `/today` or `/tomorrow` for the forecast. Use `/revert` to go back one level or `/reset` to start over.
 
 | Command | Description |
 | --- | --- |
@@ -162,11 +206,11 @@ Tests are split by two pytest markers:
 | `integration` | Runs against a real database, so it needs `TEST_DATABASE_URL` (see [Environment Variables](#environment-variables)). |
 | `prod_db` | Hits the **production** database directly. It reads and creates tables but never drops them. |
 
-Tests without a marker are unit tests. They run against mocks in place of the databases and Telegram, because each layer depends on protocols instead of concrete classes, so they need no database setup.
+Tests without a marker are unit tests. They run against fakes and mocks in place of the databases and Telegram, because each layer depends on protocols instead of concrete classes, so they need no database setup.
 
 ### Full test run
 
-Runs the unit and integration tests, and skips the production database tests:
+Runs the unit and integration tests, and skips the production database tests. Needs `TEST_DATABASE_URL`, because it includes the integration tests:
 
 ```bash
 pytest -m "not prod_db"
@@ -182,7 +226,7 @@ pytest -m "not integration and not prod_db"
 
 ### Integration tests only
 
-Needs the test databases to be configured:
+Needs the test database to be configured:
 
 ```bash
 pytest -m integration
@@ -220,7 +264,7 @@ Located in [`src/queries`](src/queries), this layer owns all database query logi
 
 - [`bot_query.py`](src/queries/bot_query.py): handles queries related to the bot itself, such as `user`, `user_state`, and `bot_offset`.
 - [`etl_query.py`](src/queries/etl_query.py): handles queries that retrieve data from the ETL database. This module is strictly read-only: it never writes or deletes data.
-- [`sqlite_query.py`](src/queries/sqlite_query.py): handles location lookups using `aiosqlite`, so queries run asynchronously without blocking the event loop. A local SQLite file suits this data because locations rarely change and are only ever read, so no network round trip or hosted database is needed. It also builds the local database from the location CSV (see `--build-local-db`).
+- [`sqlite_query.py`](src/queries/sqlite_query.py): handles location lookups using `aiosqlite`, so queries run asynchronously without blocking the event loop. Its `LocationFinder` class is what `LocationFlowHandler` uses to check user input against the valid city, subdistrict, and village names and to resolve the final `adm4_code`. A local SQLite file suits this data because locations rarely change and are only ever read, so no network round trip or hosted database is needed. This module also builds the local database from the location CSV (see `--build-local-db`).
 
 > **Why separate bot and ETL databases?** They live in separate Neon projects, and the free tier meters compute hours per project. This keeps the bot's frequent activity from consuming the ETL's compute budget, which its schedule is tuned to fit. Forecasts still depend on the ETL database, so if it runs out of compute hours, forecast replies fail until the quota resets.
 
@@ -232,14 +276,14 @@ Located in [`src/service.py`](src/service.py), this layer sits between the bot's
 
 - **User and user state:** creating, updating, and fetching users and their state via `bot_query`. Rows are mapped into `BotUserModel` and `BotUserStateModel`, and `None` is returned when nothing is found.
 - **Location state resolution:** `resolve_user_location_state` works out where a user is in the location-selection flow from which fields are filled in (`NO_STATE`, `NO_CITY_OR_REGENCY`, `NO_SUBDISTRICT`, `NO_VILLAGE`, or `COMPLETE`). It returns that state together with the user state as a `BotUserStateContext`.
-- **Weather forecasts:** fetching today's or tomorrow's forecast for an `adm4_code`. It builds the date range in the bot's timezone (`BOT_DATETIME`), reads the matching rows from `etl_query`, and streams them as `ForecastModel` objects through an async iterator. It yields control to the event loop between rows so a large result doesn't block other tasks.
+- **Weather forecasts:** fetching today's or tomorrow's forecast for an `adm4_code`. It builds the date range in the bot's timezone (`BOT_DATETIME`, a constant in the code), reads the matching rows from `etl_query`, and streams them as `ForecastModel` objects through an async iterator. It yields control to the event loop between rows so a large result doesn't block other tasks.
 
 ### Bot layer
 
 Located in [`src/bot`](src/bot), this layer sits at the top of the stack and handles all of the Telegram bot logic:
 
-- [`bot_handler.py`](src/bot/bot_handler.py): orchestrates the bot at runtime. It runs the long-polling loop, persists the update offset, retries with exponential backoff when the network is unstable, and starts and stops the throttlers. Each incoming update is parsed and validated into a command, then processed in its own task with concurrency bounded by a semaphore. The command logic itself is delegated to the respond handler. Replies are sent with retries on timeouts and Telegram rate limits, and errors caused by bad input (empty text, not a command, unknown command) are sent back to the user. On shutdown, it stops polling, waits for in-flight tasks to finish, and stops the throttlers.
-- [`bot_respond_handler.py`](src/bot/bot_respond_handler.py): turns a command into a reply by orchestrating the bot service and the location flow handler. It gets the user's location state from the bot service and passes it with the command to the bot router, which decides the list of actions to perform. The handler then executes each action (returning a message template, running a location flow step, or fetching forecasts) and joins the messages into a single reply. It also saves the results of the location flow and recovers from data integrity errors. If a user's data is missing, it tries to restore it from their saved user state, and if that fails it resets the user's data and re-raises the error.
+- [`bot_handler.py`](src/bot/bot_handler.py): orchestrates the bot at runtime. It runs the long-polling loop, persists the update offset, retries with exponential backoff when the network is unstable, and starts and stops the throttlers. Each incoming update is parsed and validated into a command, then processed in its own task with concurrency bounded by a semaphore, and the command logic is delegated to the respond handler. Replies are sent with retries on timeouts and Telegram rate limits, and errors caused by bad input are sent back to the user. On shutdown, it stops polling and waits for in-flight tasks to finish.
+- [`bot_respond_handler.py`](src/bot/bot_respond_handler.py): turns a command into a reply. It gets the user's location state from the bot service and passes it with the command to the bot router, which decides the list of actions to perform. The handler then executes each action (returning a message template, running a location flow step, or fetching forecasts) and joins the messages into a single reply. It also saves the results of the location flow and recovers from data integrity errors: if a user's data is missing, it tries to restore it from their saved user state, and if that fails it resets the user's data and re-raises the error.
 - [`bot_router.py`](src/bot/bot_router.py): maps a command to the bot actions it should trigger. Each command is registered as an `ActionEntry` (from [`domain_model.py`](src/models/domain_model.py)), and the entries are indexed in a dictionary by `(command, user_state, has_input_value)` for O(1) lookups. `route_command` looks up the exact combination first, then falls back to the entry registered with `user_state=None`, which means the command doesn't depend on the user's location state. It returns the matching tuple of `BotAction`s, or raises `ActionRegistryLookupError` if nothing matches.
 - [`location_flow_handler.py`](src/bot/location_flow_handler.py): guides the user through the location setup (city or regency, then subdistrict, then village) using the location finder. Each input is checked against the valid options. A match advances the user's state and prompts for the next level, while a miss replies with the list of valid choices. Once the village is chosen, it looks up the `adm4_code` and marks the setup as complete. It can also revert the state by one level. It only returns the new state and reply message and doesn't save anything, so the caller persists the result. If a user's saved state is missing or inconsistent, it raises a `DataIntegrityError` asking them to re-enter their location.
 - [`forecast_responder.py`](src/bot/forecast_responder.py): builds the forecast reply for a user. It takes a forecast source (the service's today or tomorrow method), streams the forecasts for the user's `adm4_code`, and formats them into a single message with a header (location code and date) followed by one entry per forecast time. If no forecasts exist for the requested range, it raises a `NoForecastResultError` with a user-friendly message.
@@ -249,7 +293,7 @@ Located in [`src/bot`](src/bot), this layer sits at the top of the stack and han
 
   Both delay replies instead of dropping them, and both run a background task (a counter reset for the global throttler, stale data cleanup for the user throttler) that must be started before use and stopped on shutdown.
 - [`bot_state_handler.py`](src/bot/bot_state_handler.py): reads and saves the bot's Telegram update offset through `bot_query`, so polling can resume after a restart. Saves are throttled to once every 30 seconds to avoid writing to the database after every poll, so after a crash the bot may reprocess a few recent updates.
-- [`bot_user_lock.py`](src/bot/bot_user_lock.py): provides a per-chat `asyncio.Lock` so requests from the same chat are handled one at a time (later ones wait their turn) instead of concurrently, preventing corrupted state. Requests from different chats still run in parallel. Locks are stored in a [`weakref.WeakValueDictionary`](https://docs.python.org/3/library/weakref.html#weakref.WeakValueDictionary), so a lock is discarded automatically once no request is holding or waiting on it
+- [`bot_user_lock.py`](src/bot/bot_user_lock.py): provides a per-chat `asyncio.Lock` so requests from the same chat are handled one at a time (later ones wait their turn) instead of concurrently, preventing corrupted state. Requests from different chats still run in parallel. Locks are stored in a [`weakref.WeakValueDictionary`](https://docs.python.org/3/library/weakref.html#weakref.WeakValueDictionary), so a lock is discarded automatically once no request is holding or waiting on it.
 - [`bot_utils.py`](src/bot/bot_utils.py): small shared helpers for the bot layer. `get_user_data_or_raise` checks that a user and their `adm4_code` exist, and otherwise raises a `DataIntegrityError` that asks the user to re-enter their location. `merge_messages` joins several message strings into one reply, separated by blank lines.
 - [`message_container.py`](src/bot/message_container.py): holds every user-facing message as constants or small formatter functions. This covers the intro, help texts, location prompts and confirmations, error replies, and the forecast layout. Messages use Telegram's HTML formatting.
 
@@ -266,3 +310,78 @@ Located in [`src/models`](src/models), this layer holds the shared data types an
 - [`enums.py`](src/models/enums.py): fixed sets of values the bot works with. `Commands` lists the supported commands, `BotAction` lists the actions the router can request, and `UserLocationState` tracks how far a user is in the location setup. `UserStateCheckLevel` is an `IntEnum` so levels can be compared when validating how much of a user's state is filled in. `UserDataRestorationResult` is the outcome of an attempt to restore missing user data.
 - [`contexts.py`](src/models/contexts.py): small dataclasses that group related values. `ETLDBContext`, `BotDBContext`, and `LocalDBContext` each bundle a database engine with its tables, while `BotUpdateContext` and `BotUserStateContext` bundle the parsed update and the resolved location state that get passed between the bot and service layers.
 - [`protocols.py`](src/models/protocols.py): `typing.Protocol` interfaces for the query, service, handler, throttler, and location finder classes. Classes depend on these interfaces instead of on each other directly, so the real implementations can be swapped for fakes in tests and the dependencies are checked by mypy.
+
+---
+
+## Run with systemd
+
+You can run the bot unattended on a VPS or server using a systemd service.
+
+> **Prerequisites:**
+>
+> - Complete the [Installation](#installation) steps and fill in `.env`.
+> - Run `run_bot --build-local-db` once by hand and let it finish, so the local location database exists. The service runs plain `run_bot` without that flag.
+
+### 1. Create the service unit
+
+```bash
+sudo nano /etc/systemd/system/prakiraan-cuaca-bot.service
+```
+
+Paste the following:
+
+```ini
+[Unit]
+Description=prakiraan-cuaca-bot project | A Telegram Weather Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/path/to/prakiraan-cuaca-bot
+ExecStart=/path/to/prakiraan-cuaca-bot/.venv/bin/run_bot
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then replace:
+
+- `/path/to/prakiraan-cuaca-bot` with the **absolute** path to the project (systemd requires absolute paths in `ExecStart`)
+
+- `your_username` with the user that owns the project
+
+`WorkingDirectory` matters: the bot reads `.env` and writes the `logs/` directory relative to it.
+
+Save with `Ctrl+O`, `Enter`, then exit with `Ctrl+X`.
+
+### 2. Enable the service
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now prakiraan-cuaca-bot.service
+```
+
+`enable` makes the service start on boot, and `--now` starts it immediately.
+
+### 3. Verify
+
+Check the status and logs of the service:
+
+```bash
+systemctl status prakiraan-cuaca-bot.service
+journalctl -f -u prakiraan-cuaca-bot.service
+```
+
+### Updating
+
+After pulling new changes (and running `pip install -e .` again if dependencies changed), restart the service:
+
+```bash
+sudo systemctl restart prakiraan-cuaca-bot.service
+```
