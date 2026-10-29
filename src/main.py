@@ -2,7 +2,9 @@ import argparse
 import asyncio
 import logging
 import os
+import signal
 import time
+from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -53,6 +55,12 @@ def setup_logging() -> None:
     logging.getLogger("aiosqlite").setLevel(logging.WARNING)
 
 
+def setup_signal_handler(stop_method: Callable[[], None]) -> None:
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, stop_method)
+    loop.add_signal_handler(signal.SIGINT, stop_method)
+
+
 def get_env(key: str) -> str:
     value = os.getenv(key)
     if not value:
@@ -92,6 +100,7 @@ async def run_app(
         user_rate_limiter,
         bot_user_lock,
     )
+    setup_signal_handler(bot_handler.stop_bot)
     async with etl_query, bot_query, location_finder:
         if args.build_local_db:
             await location_finder.start_csv_to_local_db_transformation(

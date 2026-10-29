@@ -92,7 +92,6 @@ class BotHandler:
             logger.warning("Bot is not running, no need to stop")
             return
         self._bot_is_running = False
-        logger.info("bot stopped")
 
     async def _stop_throttlers(self) -> None:
         stop_results = await asyncio.gather(
