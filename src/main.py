@@ -5,6 +5,7 @@ import os
 import signal
 import time
 from collections.abc import Callable
+from functools import partial
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -56,9 +57,18 @@ def setup_logging() -> None:
 
 
 def setup_signal_handler(stop_method: Callable[[], None]) -> None:
+    def _log_incoming_signal(stop_method: Callable[[], None], signal_name: str) -> None:
+        """Log the incoming signal_name then call the stop_method."""
+        logger.info(f"{signal_name} signal received")
+        stop_method()
+
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGTERM, stop_method)
-    loop.add_signal_handler(signal.SIGINT, stop_method)
+    loop.add_signal_handler(
+        signal.SIGTERM, partial(_log_incoming_signal, stop_method, signal.SIGTERM.name)
+    )
+    loop.add_signal_handler(
+        signal.SIGINT, partial(_log_incoming_signal, stop_method, signal.SIGINT.name)
+    )
 
 
 def get_env(key: str) -> str:
